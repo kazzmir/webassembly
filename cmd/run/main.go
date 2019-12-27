@@ -8,6 +8,7 @@ import (
     "fmt"
     "bytes"
     "encoding/binary"
+    // "encoding/hex"
 )
 
 func isAsmBytes(asm []byte) bool {
@@ -69,6 +70,224 @@ func (module *WebAssemblyFileModule) Close() {
     module.io.Close()
 }
 
+func (module *WebAssemblyFileModule) ReadSectionId() (byte, error) {
+    return module.reader.ReadByte()
+}
+
+type WebAssemblySection interface {
+    String() string
+}
+
+type WebAssemblyTypeSection struct {
+    WebAssemblySection
+}
+
+func (section *WebAssemblyTypeSection) String() string {
+    return "type section"
+}
+
+func ReadU32(reader io.ByteReader) (uint32, error) {
+    var result uint32
+    var shift uint32
+
+    count := 0
+
+    for {
+        next, err := reader.ReadByte()
+        if err != nil {
+            return 0, err
+        }
+
+        result = result | uint32((next & 0b1111111) << shift)
+        if next & (1<<7) == 0 {
+            return result, nil
+        }
+
+        shift += 7
+
+        /* Safety check */
+        count += 1
+        if count > 20 {
+            return 0, fmt.Errorf("Read too many bytes in a LEB128 integer")
+        }
+    }
+}
+
+
+/* All integers are encoded using the LEB128 variable-length integer encoding, in either unsigned or signed variant.
+ * Unsigned integers are encoded in unsigned LEB128 format. As an additional constraint, the total number of bytes encoding a value of type uNuN must not exceed ceil(N/7)ceil(N/7) bytes.
+ */
+func (module *WebAssemblyFileModule) ReadU32() (uint32, error) {
+    return ReadU32(module.reader)
+}
+
+type ValueType int
+const (
+    InvalidValueType ValueType = 0
+    ValueTypeI32 ValueType = 0x7f
+    ValueTypeI64 ValueType = 0x7e
+    ValueTypeF32 ValueType = 0x7d
+    ValueTypeF64 ValueType = 0x7c
+)
+
+func ReadValueType(reader io.ByteReader) (ValueType, error) {
+    kind, err := reader.ReadByte()
+    if err != nil {
+        return InvalidValueType, err
+    }
+
+    switch kind {
+        case 0x7f: return ValueTypeI32, nil
+        case 0x7e: return ValueTypeI64, nil
+        case 0x7d: return ValueTypeF32, nil
+        case 0x7c: return ValueTypeF64, nil
+    }
+
+    return InvalidValueType, fmt.Errorf("Unknown value type %v", kind)
+}
+
+func ReadTypeVector(reader io.ByteReader) ([]ValueType, error) {
+    length, err := ReadU32(reader)
+    if err != nil {
+        return nil, err
+    }
+
+    var out []ValueType
+    var i uint32
+    for i = 0; i < length; i++ {
+        valueType, err := ReadValueType(reader)
+        if err != nil {
+            return nil, err
+        }
+        out = append(out, valueType)
+    }
+
+    return out, nil
+}
+
+func (module *WebAssemblyFileModule) ReadFunctionType(reader io.Reader) error {
+    buffer := NewByteReader(reader)
+    magic, err := buffer.ReadByte()
+    if err != nil {
+        return fmt.Errorf("Could not read function type: %v", err)
+    }
+
+    if magic != 0x60 {
+        return fmt.Errorf("Expected to read function type 0x60 but got %x\n", magic)
+    }
+
+    inputTypes, err := ReadTypeVector(buffer)
+    if err != nil {
+        return err
+    }
+
+    outputTypes, err := ReadTypeVector(buffer)
+    if err != nil {
+        return err
+    }
+
+    log.Printf("Function %v -> %v\n", inputTypes, outputTypes)
+
+    return nil
+}
+
+type ByteReader struct {
+    io.ByteReader
+    Reader io.Reader
+}
+
+func (reader *ByteReader) ReadByte() (byte, error) {
+    out := make([]byte, 1)
+    count, err := reader.Reader.Read(out)
+    if err != nil {
+        return 0, err
+    }
+
+    if count == 1 {
+        return out[0], nil
+    }
+
+    return 0, fmt.Errorf("Did not read a byte")
+}
+
+func NewByteReader(reader io.Reader) io.ByteReader {
+    return &ByteReader{
+        Reader: reader,
+    }
+}
+
+func (module *WebAssemblyFileModule) ReadTypeSection(sectionSize uint32) (*WebAssemblyTypeSection, error) {
+    log.Printf("Type section size %v\n", sectionSize)
+    // sectionReader := io.LimitReader(module.reader, int64(sectionSize))
+    sectionReader := &io.LimitedReader{
+        R: module.reader,
+        N: int64(sectionSize),
+    }
+
+    log.Printf("Bytes remaining %v\n", sectionReader.N)
+
+    length, err := ReadU32(NewByteReader(sectionReader))
+    if err != nil {
+        return nil, err
+    }
+
+    log.Printf("Read %v function types\n", length)
+
+    for length > 0 {
+        length -= 1
+
+        log.Printf("Bytes remaining %v\n", sectionReader.N)
+
+        err := module.ReadFunctionType(sectionReader)
+        if err != nil {
+            return nil, err
+        }
+    }
+
+    return nil, nil
+}
+
+func (module *WebAssemblyFileModule) ReadSection() (WebAssemblySection, error) {
+    sectionId, err := module.ReadSectionId()
+    if err != nil {
+        return nil, err
+    }
+
+    sectionSize, err := module.ReadU32()
+    if err != nil {
+        return nil, err
+    }
+
+    switch sectionId {
+        /* custom section */
+        case 0: return nil, fmt.Errorf("Unimplemented section %v", sectionId)
+        /* type section */
+        case 1: return module.ReadTypeSection(sectionSize)
+        /* import section */
+        case 2: return nil, fmt.Errorf("Unimplemented section %v", sectionId)
+        /* function section */
+        case 3: return nil, fmt.Errorf("Unimplemented section %v", sectionId)
+        /* table section */
+        case 4: return nil, fmt.Errorf("Unimplemented section %v", sectionId)
+        /* memory section */
+        case 5: return nil, fmt.Errorf("Unimplemented section %v", sectionId)
+        /* global section */
+        case 6: return nil, fmt.Errorf("Unimplemented section %v", sectionId)
+        /* export section */
+        case 7: return nil, fmt.Errorf("Unimplemented section %v", sectionId)
+        /* start section */
+        case 8: return nil, fmt.Errorf("Unimplemented section %v", sectionId)
+        /* element section */
+        case 9: return nil, fmt.Errorf("Unimplemented section %v", sectionId)
+        /* code section */
+        case 10: return nil, fmt.Errorf("Unimplemented section %v", sectionId)
+        /* data section */
+        case 11: return nil, fmt.Errorf("Unimplemented section %v", sectionId)
+    }
+
+    return nil, fmt.Errorf("Unknown section id %v", sectionId)
+}
+
 func run(path string) error {
     module, err := WebAssemblyNew(path)
     if err != nil {
@@ -90,6 +309,12 @@ func run(path string) error {
     if version != 1 {
         log.Printf("Warning: unexpected module version %v. Expected 1\n", version)
     }
+
+    section, err := module.ReadSection()
+    if err != nil {
+        return err
+    }
+    log.Printf("Section %v\n", section.String())
 
     return nil
 }
