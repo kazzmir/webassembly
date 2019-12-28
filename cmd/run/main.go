@@ -7,6 +7,7 @@ import (
     "io"
     "fmt"
     "bytes"
+    "unicode/utf8"
     "encoding/binary"
     // "encoding/hex"
 )
@@ -173,7 +174,7 @@ func (module *WebAssemblyFileModule) ReadFunctionType(reader io.Reader) error {
     }
 
     if magic != 0x60 {
-        return fmt.Errorf("Expected to read function type 0x60 but got %x\n", magic)
+        return fmt.Errorf("Expected to read function type 0x60 but got 0x%x\n", magic)
     }
 
     inputTypes, err := ReadTypeVector(buffer)
@@ -196,6 +197,10 @@ type ByteReader struct {
     Reader io.Reader
 }
 
+func (reader *ByteReader) Read(data []byte) (int, error) {
+    return reader.Reader.Read(data)
+}
+
 func (reader *ByteReader) ReadByte() (byte, error) {
     out := make([]byte, 1)
     count, err := reader.Reader.Read(out)
@@ -210,7 +215,7 @@ func (reader *ByteReader) ReadByte() (byte, error) {
     return 0, fmt.Errorf("Did not read a byte")
 }
 
-func NewByteReader(reader io.Reader) io.ByteReader {
+func NewByteReader(reader io.Reader) *ByteReader {
     return &ByteReader{
         Reader: reader,
     }
@@ -247,6 +252,79 @@ func (module *WebAssemblyFileModule) ReadTypeSection(sectionSize uint32) (*WebAs
     return nil, nil
 }
 
+type WebAssemblyImportSection struct {
+    WebAssemblySection
+}
+
+func (section *WebAssemblyImportSection) String() string {
+    return "import section"
+}
+
+func ReadName(reader *ByteReader) (string, error) {
+    length, err := ReadU32(reader)
+    if err != nil {
+        return "", fmt.Errorf("Could not read name length: %v", err)
+    }
+
+    /* FIXME: put limits somewhere */
+    if length > 10 * 1024 * 1024 {
+        return "", fmt.Errorf("Name length too large: %v", length)
+    }
+
+    raw := make([]byte, length)
+    count, err := io.ReadFull(reader, raw)
+    if err != nil {
+        return "", fmt.Errorf("Could not read name bytes %v: %v", length, err)
+    }
+
+    if count != int(length) {
+        return "", fmt.Errorf("Read %v out of %v bytes", count, length)
+    }
+
+    out := ""
+
+    for len(raw) > 0 {
+        next, size := utf8.DecodeRune(raw)
+        if size == 0 {
+            return "", fmt.Errorf("Could not decode utf8 string %v", raw)
+        }
+
+        out = out + string(next)
+
+        raw = raw[size:]
+    }
+
+    return out, nil
+}
+
+func (module *WebAssemblyFileModule) ReadImportSection(sectionSize uint32) (*WebAssemblyImportSection, error) {
+    log.Printf("Read import section size %v\n", sectionSize)
+
+    sectionReader := NewByteReader(io.LimitReader(module.reader, int64(sectionSize)))
+
+    imports, err := ReadU32(NewByteReader(sectionReader))
+    if err != nil {
+        return nil, fmt.Errorf("Could not read imports: %v", err)
+    }
+
+    var i uint32
+    for i = 0; i < imports; i++ {
+        moduleName, err := ReadName(sectionReader)
+        if err != nil {
+            return nil, err
+        }
+
+        name, err := ReadName(sectionReader)
+        if err != nil {
+            return nil, err
+        }
+
+        log.Printf("Import module '%v' name '%v'\n", moduleName, name)
+    }
+
+    return nil, nil
+}
+
 func (module *WebAssemblyFileModule) ReadSection() (WebAssemblySection, error) {
     sectionId, err := module.ReadSectionId()
     if err != nil {
@@ -264,7 +342,7 @@ func (module *WebAssemblyFileModule) ReadSection() (WebAssemblySection, error) {
         /* type section */
         case 1: return module.ReadTypeSection(sectionSize)
         /* import section */
-        case 2: return nil, fmt.Errorf("Unimplemented section %v", sectionId)
+        case 2: return module.ReadImportSection(sectionSize)
         /* function section */
         case 3: return nil, fmt.Errorf("Unimplemented section %v", sectionId)
         /* table section */
@@ -310,11 +388,13 @@ func run(path string) error {
         log.Printf("Warning: unexpected module version %v. Expected 1\n", version)
     }
 
-    section, err := module.ReadSection()
-    if err != nil {
-        return err
+    for {
+        section, err := module.ReadSection()
+        if err != nil {
+            return err
+        }
+        log.Printf("Section %v\n", section.String())
     }
-    log.Printf("Section %v\n", section.String())
 
     return nil
 }
