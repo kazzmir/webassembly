@@ -297,12 +297,72 @@ func ReadName(reader *ByteReader) (string, error) {
     return out, nil
 }
 
+type ImportDescription byte
+const (
+    InvalidImportDescription ImportDescription = 0xff
+    FunctionImportDescription ImportDescription = 0x00
+    TableImportDescription ImportDescription = 0x01
+    MemoryImportDescription ImportDescription = 0x02
+    GlobalImportDescription ImportDescription = 0x03
+)
+
+type ImportType interface {
+}
+
+type FunctionImport struct {
+    ImportType
+    Index uint32
+}
+
+func ReadFunctionImport(reader *ByteReader) (*FunctionImport, error) {
+    index, err := ReadU32(reader)
+    if err != nil {
+        return nil, err
+    }
+
+    return &FunctionImport{
+        Index: index,
+    }, nil
+}
+
+type TableImport struct {
+    ImportType
+    Index uint32
+}
+
+func ReadTableImport(reader *ByteReader) (*TableImport, error) {
+    index, err := ReadU32(reader)
+    if err != nil {
+        return nil, err
+    }
+
+    return &TableImport{
+        Index: index,
+    }, nil
+}
+
+func ReadImportDescription(reader *ByteReader) (ImportType, error) {
+    kind, err := reader.ReadByte()
+    if err != nil {
+        return InvalidImportDescription, err
+    }
+
+    switch kind {
+        case byte(FunctionImportDescription): return ReadFunctionImport(reader)
+        case byte(TableImportDescription): return ReadTableImport(reader)
+        case byte(MemoryImportDescription): return nil, fmt.Errorf("Unimplemented import description %v", MemoryImportDescription)
+        case byte(GlobalImportDescription): return nil, fmt.Errorf("Unimplemented import description %v", GlobalImportDescription)
+    }
+
+    return InvalidImportDescription, fmt.Errorf("Unknown import description '%v'", kind)
+}
+
 func (module *WebAssemblyFileModule) ReadImportSection(sectionSize uint32) (*WebAssemblyImportSection, error) {
     log.Printf("Read import section size %v\n", sectionSize)
 
     sectionReader := NewByteReader(io.LimitReader(module.reader, int64(sectionSize)))
 
-    imports, err := ReadU32(NewByteReader(sectionReader))
+    imports, err := ReadU32(sectionReader)
     if err != nil {
         return nil, fmt.Errorf("Could not read imports: %v", err)
     }
@@ -319,7 +379,12 @@ func (module *WebAssemblyFileModule) ReadImportSection(sectionSize uint32) (*Web
             return nil, err
         }
 
-        log.Printf("Import module '%v' name '%v'\n", moduleName, name)
+        kind, err := ReadImportDescription(sectionReader)
+        if err != nil {
+            return nil, err
+        }
+
+        log.Printf("Import module '%v' name '%v' kind '%v'\n", moduleName, name, kind)
     }
 
     return nil, nil
