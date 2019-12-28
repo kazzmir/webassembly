@@ -229,14 +229,14 @@ func (module *WebAssemblyFileModule) ReadTypeSection(sectionSize uint32) (*WebAs
         N: int64(sectionSize),
     }
 
-    log.Printf("Bytes remaining %v\n", sectionReader.N)
+    // log.Printf("Bytes remaining %v\n", sectionReader.N)
 
     length, err := ReadU32(NewByteReader(sectionReader))
     if err != nil {
         return nil, err
     }
 
-    log.Printf("Read %v function types\n", length)
+    // log.Printf("Read %v function types\n", length)
 
     for length > 0 {
         length -= 1
@@ -390,6 +390,52 @@ func (module *WebAssemblyFileModule) ReadImportSection(sectionSize uint32) (*Web
     return nil, nil
 }
 
+type WebAssemblyFunctionSection struct {
+    WebAssemblySection
+}
+
+func (section *WebAssemblyFunctionSection) String() string {
+    return "function section"
+}
+
+func (module *WebAssemblyFileModule) ReadFunctionSection(size uint32) (*WebAssemblyFunctionSection, error) {
+    log.Printf("Read function section size %v\n", size)
+
+    sectionReader := NewByteReader(io.LimitReader(module.reader, int64(size)))
+    types, err := ReadU32(sectionReader)
+    if err != nil {
+        return nil, err
+    }
+
+    log.Printf("Functions %v\n", types)
+
+    var i uint32
+    for i = 0; i < types; i++ {
+        index, err := ReadU32(sectionReader)
+        if err != nil {
+            return nil, err
+        }
+
+        log.Printf("Function index 0x%x\n", index)
+    }
+
+    return nil, nil
+}
+
+type WebAssemblyExportSection struct {
+    WebAssemblySection
+}
+
+func (section *WebAssemblyExportSection) String() string {
+    return "export section"
+}
+
+func (module *WebAssemblyFileModule) ReadExportSection(size uint32) (*WebAssemblyExportSection, error) {
+    log.Printf("Read export section size %v\n", size)
+
+    return nil, nil
+}
+
 func (module *WebAssemblyFileModule) ReadSection() (WebAssemblySection, error) {
     sectionId, err := module.ReadSectionId()
     if err != nil {
@@ -409,7 +455,7 @@ func (module *WebAssemblyFileModule) ReadSection() (WebAssemblySection, error) {
         /* import section */
         case 2: return module.ReadImportSection(sectionSize)
         /* function section */
-        case 3: return nil, fmt.Errorf("Unimplemented section %v", sectionId)
+        case 3: return module.ReadFunctionSection(sectionSize)
         /* table section */
         case 4: return nil, fmt.Errorf("Unimplemented section %v", sectionId)
         /* memory section */
@@ -417,7 +463,7 @@ func (module *WebAssemblyFileModule) ReadSection() (WebAssemblySection, error) {
         /* global section */
         case 6: return nil, fmt.Errorf("Unimplemented section %v", sectionId)
         /* export section */
-        case 7: return nil, fmt.Errorf("Unimplemented section %v", sectionId)
+        case 7: return module.ReadExportSection(sectionSize)
         /* start section */
         case 8: return nil, fmt.Errorf("Unimplemented section %v", sectionId)
         /* element section */
