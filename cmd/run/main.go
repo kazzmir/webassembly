@@ -167,6 +167,8 @@ func ReadTypeVector(reader io.ByteReader) ([]ValueType, error) {
     return out, nil
 }
 
+const FunctionTypeMagic = 0x60
+
 func (module *WebAssemblyFileModule) ReadFunctionType(reader io.Reader) error {
     buffer := NewByteReader(reader)
     magic, err := buffer.ReadByte()
@@ -174,8 +176,8 @@ func (module *WebAssemblyFileModule) ReadFunctionType(reader io.Reader) error {
         return fmt.Errorf("Could not read function type: %v", err)
     }
 
-    if magic != 0x60 {
-        return fmt.Errorf("Expected to read function type 0x60 but got 0x%x\n", magic)
+    if magic != FunctionTypeMagic {
+        return fmt.Errorf("Expected to read function type 0x%x but got 0x%x\n", magic, FunctionTypeMagic)
     }
 
     inputTypes, err := ReadTypeVector(buffer)
@@ -425,7 +427,7 @@ func (module *WebAssemblyFileModule) ReadFunctionSection(size uint32) (*WebAssem
             return nil, err
         }
 
-        log.Printf("Function index 0x%x\n", index)
+        log.Printf("Function %v has type index 0x%x\n", i, index)
     }
 
     _, err = sectionReader.ReadByte()
@@ -612,6 +614,94 @@ func (module *WebAssemblyFileModule) ReadCodeSection(size uint32) (*WebAssemblyC
     return nil, nil
 }
 
+type WebAssemblyTableSection struct {
+    WebAssemblySection
+}
+
+func (section *WebAssemblyTableSection) String() string {
+    return "table section"
+}
+
+type Limit struct {
+    Minimum uint32
+    Maximum uint32
+    HasMaximum bool
+}
+
+func ReadLimit(reader *ByteReader) (Limit, error) {
+    kind, err := reader.ReadByte()
+    if err != nil {
+        return Limit{}, fmt.Errorf("Could not read limit type: %v", err)
+    }
+
+    switch kind {
+        case 0x00:
+            minimum, err := ReadU32(reader)
+            if err != nil {
+                return Limit{}, fmt.Errorf("Could not read minimum limit: %v", err)
+            }
+            return Limit{
+                Minimum: minimum,
+                HasMaximum: false,
+            }, nil
+        case 0x01:
+            minimum, err := ReadU32(reader)
+            if err != nil {
+                return Limit{}, fmt.Errorf("Could not read minimum limit: %v", err)
+            }
+            maximum, err := ReadU32(reader)
+            if err != nil {
+                return Limit{}, fmt.Errorf("Could not read maximum limit: %v", err)
+            }
+
+            return Limit{
+                Minimum: minimum,
+                Maximum: maximum,
+                HasMaximum: true,
+            }, nil
+    }
+
+    return Limit{}, fmt.Errorf("Unknown limit type 0x%x", kind)
+}
+
+const TableElementMagic = 0x70
+
+func (module *WebAssemblyFileModule) ReadTableSection(size uint32) (*WebAssemblyTableSection, error) {
+    log.Printf("Read table section size %v\n", size)
+    sectionReader := NewByteReader(io.LimitReader(module.reader, int64(size)))
+
+    tables, err := ReadU32(sectionReader)
+    if err != nil {
+        return nil, fmt.Errorf("Could not read number of tables in the table section: %v", err)
+    }
+
+    var i uint32
+    for i = 0; i < tables; i++ {
+        magic, err := sectionReader.ReadByte()
+        if err != nil {
+            return nil, fmt.Errorf("Could not read table entry %v: %v", i, err)
+        }
+
+        if magic != TableElementMagic {
+            return nil, fmt.Errorf("Expected to read table magic 0x%x but got 0x%x for entry %v", TableElementMagic, magic, i)
+        }
+
+        limit, err := ReadLimit(sectionReader)
+        if err != nil {
+            return nil, fmt.Errorf("Could not read limit for table entry %v: %v", i, err)
+        }
+
+        log.Printf("Table entry %v: limit=%v\n", i, limit)
+    }
+
+    _, err = sectionReader.ReadByte()
+    if err == nil {
+        return nil, fmt.Errorf("Error reading table section: not all bytes were read")
+    }
+
+    return nil, nil
+}
+
 const (
     CustomSection byte = 0
     TypeSection byte = 1
@@ -648,7 +738,7 @@ func (module *WebAssemblyFileModule) ReadSection() (WebAssemblySection, error) {
         case TypeSection: return module.ReadTypeSection(sectionSize)
         case ImportSection: return module.ReadImportSection(sectionSize)
         case FunctionSection: return module.ReadFunctionSection(sectionSize)
-        case TableSection: return nil, fmt.Errorf("Unimplemented section %v: table section", sectionId)
+        case TableSection: return module.ReadTableSection(sectionSize)
         case MemorySection: return nil, fmt.Errorf("Unimplemented section %v: memory section", sectionId)
         case GlobalSection: return nil, fmt.Errorf("Unimplemented section %v: global section", sectionId)
         case ExportSection: return module.ReadExportSection(sectionSize)
