@@ -702,6 +702,61 @@ func (module *WebAssemblyFileModule) ReadTableSection(size uint32) (*WebAssembly
     return nil, nil
 }
 
+type WebAssemblyElementSection struct {
+    WebAssemblySection
+}
+
+func (section *WebAssemblyElementSection) String() string {
+    return "element section"
+}
+
+func (module *WebAssemblyFileModule) ReadElementSection(size uint32) (*WebAssemblyElementSection, error) {
+    log.Printf("Read element section size %v\n", size)
+    sectionReader := NewByteReader(io.LimitReader(module.reader, int64(size)))
+
+    elements, err := ReadU32(sectionReader)
+    if err != nil {
+        return nil, fmt.Errorf("Could not read elements length from the element section: %v", err)
+    }
+
+    var i uint32
+    for i = 0; i < elements; i++ {
+        index, err := ReadU32(sectionReader)
+        if err != nil {
+            return nil, fmt.Errorf("Could not read type index for element %v: %v", i, err)
+        }
+
+        expressions, err := ReadExpressionSequence(sectionReader)
+        if err != nil {
+            return nil, fmt.Errorf("Could not read expressions for element %v: %v", i, err)
+        }
+
+        initFunctions, err := ReadU32(sectionReader)
+        if err != nil {
+            return nil, fmt.Errorf("Could not read init functions for element %v: %v", i, err)
+        }
+
+        var j uint32
+        for j = 0; j < initFunctions; j++ {
+            functionIndex, err := ReadU32(sectionReader)
+            if err != nil {
+                return nil, fmt.Errorf("Could not read function index for element %v[%v]: %v", i, j, err)
+            }
+
+            _ = functionIndex
+        }
+
+        log.Printf("Element %v: index=%v expressions=%v\n", i, index, expressions)
+    }
+
+    _, err = sectionReader.ReadByte()
+    if err == nil {
+        return nil, fmt.Errorf("Error reading element section: not all bytes were read")
+    }
+
+    return nil, nil
+}
+
 const (
     CustomSection byte = 0
     TypeSection byte = 1
@@ -743,7 +798,7 @@ func (module *WebAssemblyFileModule) ReadSection() (WebAssemblySection, error) {
         case GlobalSection: return nil, fmt.Errorf("Unimplemented section %v: global section", sectionId)
         case ExportSection: return module.ReadExportSection(sectionSize)
         case StartSection: return nil, fmt.Errorf("Unimplemented section %v: start section", sectionId)
-        case ElementSection: return nil, fmt.Errorf("Unimplemented section %v: element section", sectionId)
+        case ElementSection: return module.ReadElementSection(sectionSize)
         case CodeSection: return module.ReadCodeSection(sectionSize)
         case DataSection: return nil, fmt.Errorf("Unimplemented section %v: data section", sectionId)
     }
