@@ -436,6 +436,21 @@ func (module *WebAssemblyFileModule) ReadExportSection(size uint32) (*WebAssembl
     return nil, nil
 }
 
+const (
+    CustomSection byte = 0
+    TypeSection byte = 1
+    ImportSection byte = 2
+    FunctionSection byte = 3
+    TableSection byte = 4
+    MemorySection byte = 5
+    GlobalSection byte = 6
+    ExportSection byte = 7
+    StartSection byte = 8
+    ElementSection byte = 9
+    CodeSection byte = 10
+    DataSection byte = 11
+)
+
 func (module *WebAssemblyFileModule) ReadSection() (WebAssemblySection, error) {
     sectionId, err := module.ReadSectionId()
     if err != nil {
@@ -448,30 +463,18 @@ func (module *WebAssemblyFileModule) ReadSection() (WebAssemblySection, error) {
     }
 
     switch sectionId {
-        /* custom section */
-        case 0: return nil, fmt.Errorf("Unimplemented section %v", sectionId)
-        /* type section */
-        case 1: return module.ReadTypeSection(sectionSize)
-        /* import section */
-        case 2: return module.ReadImportSection(sectionSize)
-        /* function section */
-        case 3: return module.ReadFunctionSection(sectionSize)
-        /* table section */
-        case 4: return nil, fmt.Errorf("Unimplemented section %v", sectionId)
-        /* memory section */
-        case 5: return nil, fmt.Errorf("Unimplemented section %v", sectionId)
-        /* global section */
-        case 6: return nil, fmt.Errorf("Unimplemented section %v", sectionId)
-        /* export section */
-        case 7: return module.ReadExportSection(sectionSize)
-        /* start section */
-        case 8: return nil, fmt.Errorf("Unimplemented section %v", sectionId)
-        /* element section */
-        case 9: return nil, fmt.Errorf("Unimplemented section %v", sectionId)
-        /* code section */
-        case 10: return nil, fmt.Errorf("Unimplemented section %v", sectionId)
-        /* data section */
-        case 11: return nil, fmt.Errorf("Unimplemented section %v", sectionId)
+        case CustomSection: return nil, fmt.Errorf("Unimplemented section %v", sectionId)
+        case TypeSection: return module.ReadTypeSection(sectionSize)
+        case ImportSection: return module.ReadImportSection(sectionSize)
+        case FunctionSection: return module.ReadFunctionSection(sectionSize)
+        case TableSection: return nil, fmt.Errorf("Unimplemented section %v", sectionId)
+        case MemorySection: return nil, fmt.Errorf("Unimplemented section %v", sectionId)
+        case GlobalSection: return nil, fmt.Errorf("Unimplemented section %v", sectionId)
+        case ExportSection: return module.ReadExportSection(sectionSize)
+        case StartSection: return nil, fmt.Errorf("Unimplemented section %v", sectionId)
+        case ElementSection: return nil, fmt.Errorf("Unimplemented section %v", sectionId)
+        case CodeSection: return nil, fmt.Errorf("Unimplemented section %v", sectionId)
+        case DataSection: return nil, fmt.Errorf("Unimplemented section %v", sectionId)
     }
 
     return nil, fmt.Errorf("Unknown section id %v", sectionId)
