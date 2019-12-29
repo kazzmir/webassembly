@@ -7,6 +7,7 @@ import (
     "io"
     "fmt"
     "bytes"
+    "errors"
     "unicode/utf8"
     "encoding/binary"
     // "encoding/hex"
@@ -223,31 +224,39 @@ func NewByteReader(reader io.Reader) *ByteReader {
 
 func (module *WebAssemblyFileModule) ReadTypeSection(sectionSize uint32) (*WebAssemblyTypeSection, error) {
     log.Printf("Type section size %v\n", sectionSize)
-    // sectionReader := io.LimitReader(module.reader, int64(sectionSize))
+    sectionReader := NewByteReader(io.LimitReader(module.reader, int64(sectionSize)))
+    /*
     sectionReader := &io.LimitedReader{
         R: module.reader,
         N: int64(sectionSize),
     }
+    */
 
     // log.Printf("Bytes remaining %v\n", sectionReader.N)
 
-    length, err := ReadU32(NewByteReader(sectionReader))
+    length, err := ReadU32(sectionReader)
     if err != nil {
         return nil, err
     }
 
     // log.Printf("Read %v function types\n", length)
 
-    for length > 0 {
-        length -= 1
+    var i uint32
+    for i = 0; i < length; i++ {
 
-        log.Printf("Bytes remaining %v\n", sectionReader.N)
+        // log.Printf("Bytes remaining %v\n", sectionReader.N)
 
         err := module.ReadFunctionType(sectionReader)
         if err != nil {
             return nil, err
         }
     }
+
+    _, err = sectionReader.ReadByte()
+    if err == nil {
+        return nil, fmt.Errorf("Error reading type section: not all bytes were read")
+    }
+
 
     return nil, nil
 }
@@ -419,6 +428,12 @@ func (module *WebAssemblyFileModule) ReadFunctionSection(size uint32) (*WebAssem
         log.Printf("Function index 0x%x\n", index)
     }
 
+    _, err = sectionReader.ReadByte()
+    if err == nil {
+        return nil, fmt.Errorf("Error reading function section: not all bytes were read")
+    }
+
+
     return nil, nil
 }
 
@@ -480,6 +495,120 @@ func (module *WebAssemblyFileModule) ReadExportSection(size uint32) (*WebAssembl
         log.Printf("Export %v: name='%v' description=%v\n", i, name, description)
     }
 
+    _, err = sectionReader.ReadByte()
+    if err == nil {
+        return nil, fmt.Errorf("Error reading export section: not all bytes were read")
+    }
+
+    return nil, nil
+}
+
+type WebAssemblyCodeSection struct {
+    WebAssemblySection
+}
+
+func (section *WebAssemblyCodeSection) String() string {
+    return "code section"
+}
+
+type Code struct {
+}
+
+type Expression struct {
+}
+
+const (
+    InstructionEnd = 0x0b
+)
+
+func ReadExpressionSequence(reader *ByteReader) ([]Expression, error){
+
+    count := 0
+    for {
+        instruction, err := reader.ReadByte()
+        if err != nil {
+            return nil, fmt.Errorf("Could not read instruction: %v", err)
+        }
+
+        log.Printf("Instruction %v: 0x%x\n", count, instruction)
+
+        count += 1
+
+        if instruction == InstructionEnd {
+            log.Printf("Read %v instructions\n", count)
+            return nil, nil
+        }
+    }
+}
+
+func ReadCode(reader *ByteReader) (Code, error) {
+    locals, err := ReadU32(reader)
+    if err != nil {
+        return Code{}, fmt.Errorf("Could not read locals: %v", err)
+    }
+
+    log.Printf("Read code locals %v\n", locals)
+
+    var i uint32
+    for i = 0; i < locals; i++ {
+        size, err := ReadU32(reader)
+        if err != nil {
+            return Code{}, fmt.Errorf("Could not read local size for %v: %v", i, err)
+        }
+
+        valueType, err := ReadValueType(reader)
+        if err != nil {
+            return Code{}, fmt.Errorf("Could not read type of local for %v: %v", i, err)
+        }
+
+        log.Printf("Local %v; size=%v type=%v\n", i, size, valueType)
+    }
+
+    expressions, err := ReadExpressionSequence(reader)
+    if err != nil {
+        return Code{}, fmt.Errorf("Could not read expressions: %v", err)
+    }
+
+    _ = expressions
+
+    return Code{}, nil
+}
+
+func (module *WebAssemblyFileModule) ReadCodeSection(size uint32) (*WebAssemblyCodeSection, error) {
+    log.Printf("Read code section size %v\n", size)
+    sectionReader := NewByteReader(io.LimitReader(module.reader, int64(size)))
+
+    codes, err := ReadU32(sectionReader)
+    if err != nil {
+        return nil, fmt.Errorf("Could not read code vector length from code section: %v", err)
+    }
+
+    var i uint32
+    for i = 0; i < codes; i++ {
+        size, err := ReadU32(sectionReader)
+        if err != nil {
+            return nil, fmt.Errorf("Error reading size of code %v: %v", i, err)
+        }
+
+        codeReader := NewByteReader(io.LimitReader(sectionReader, int64(size)))
+        code, err := ReadCode(codeReader)
+        if err != nil {
+            return nil, fmt.Errorf("Could not read code %v: %v", i, err)
+        }
+
+        _, err = codeReader.ReadByte()
+        if err == nil {
+            return nil, fmt.Errorf("Error reading code %v: not all bytes were read", i)
+        }
+
+        log.Printf("Code %v: size=%v code=%v\n", i, size, code)
+    }
+
+    _, err = sectionReader.ReadByte()
+    if err == nil {
+        return nil, fmt.Errorf("Error reading code section: not all bytes were read")
+    }
+
     return nil, nil
 }
 
@@ -501,27 +630,32 @@ const (
 func (module *WebAssemblyFileModule) ReadSection() (WebAssemblySection, error) {
     sectionId, err := module.ReadSectionId()
     if err != nil {
-        return nil, err
+        /* If we read eof then we probably read all bytes available, so there is no section to read */
+        if errors.Is(err, io.EOF) {
+            return nil, nil
+        }
+
+        return nil, fmt.Errorf("Could not read section id: %v", err)
     }
 
     sectionSize, err := module.ReadU32()
     if err != nil {
-        return nil, err
+        return nil, fmt.Errorf("Could not read section size: %v", err)
     }
 
     switch sectionId {
-        case CustomSection: return nil, fmt.Errorf("Unimplemented section %v", sectionId)
+        case CustomSection: return nil, fmt.Errorf("Unimplemented section %v: custom section", sectionId)
         case TypeSection: return module.ReadTypeSection(sectionSize)
         case ImportSection: return module.ReadImportSection(sectionSize)
         case FunctionSection: return module.ReadFunctionSection(sectionSize)
-        case TableSection: return nil, fmt.Errorf("Unimplemented section %v", sectionId)
-        case MemorySection: return nil, fmt.Errorf("Unimplemented section %v", sectionId)
-        case GlobalSection: return nil, fmt.Errorf("Unimplemented section %v", sectionId)
+        case TableSection: return nil, fmt.Errorf("Unimplemented section %v: table section", sectionId)
+        case MemorySection: return nil, fmt.Errorf("Unimplemented section %v: memory section", sectionId)
+        case GlobalSection: return nil, fmt.Errorf("Unimplemented section %v: global section", sectionId)
         case ExportSection: return module.ReadExportSection(sectionSize)
-        case StartSection: return nil, fmt.Errorf("Unimplemented section %v", sectionId)
-        case ElementSection: return nil, fmt.Errorf("Unimplemented section %v", sectionId)
-        case CodeSection: return nil, fmt.Errorf("Unimplemented section %v", sectionId)
-        case DataSection: return nil, fmt.Errorf("Unimplemented section %v", sectionId)
+        case StartSection: return nil, fmt.Errorf("Unimplemented section %v: start section", sectionId)
+        case ElementSection: return nil, fmt.Errorf("Unimplemented section %v: element section", sectionId)
+        case CodeSection: return module.ReadCodeSection(sectionSize)
+        case DataSection: return nil, fmt.Errorf("Unimplemented section %v: data section", sectionId)
     }
 
     return nil, fmt.Errorf("Unknown section id %v", sectionId)
@@ -554,6 +688,10 @@ func run(path string) error {
         if err != nil {
             return err
         }
+        if section == nil {
+            return nil
+        }
+
         log.Printf("Section %v\n", section.String())
     }
 
