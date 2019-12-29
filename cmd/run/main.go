@@ -306,55 +306,55 @@ const (
     GlobalImportDescription ImportDescription = 0x03
 )
 
-type ImportType interface {
+type Index interface {
 }
 
-type FunctionImport struct {
-    ImportType
-    Index uint32
+type FunctionIndex struct {
+    Index
+    Id uint32
 }
 
-func ReadFunctionImport(reader *ByteReader) (*FunctionImport, error) {
+func ReadFunctionIndex(reader *ByteReader) (*FunctionIndex, error) {
     index, err := ReadU32(reader)
     if err != nil {
         return nil, err
     }
 
-    return &FunctionImport{
-        Index: index,
+    return &FunctionIndex{
+        Id: index,
     }, nil
 }
 
-type TableImport struct {
-    ImportType
-    Index uint32
+type TableIndex struct {
+    Index
+    Id uint32
 }
 
-func ReadTableImport(reader *ByteReader) (*TableImport, error) {
+func ReadTableIndex(reader *ByteReader) (*TableIndex, error) {
     index, err := ReadU32(reader)
     if err != nil {
         return nil, err
     }
 
-    return &TableImport{
-        Index: index,
+    return &TableIndex{
+        Id: index,
     }, nil
 }
 
-func ReadImportDescription(reader *ByteReader) (ImportType, error) {
+func ReadImportDescription(reader *ByteReader) (Index, error) {
     kind, err := reader.ReadByte()
     if err != nil {
-        return InvalidImportDescription, err
+        return nil, err
     }
 
     switch kind {
-        case byte(FunctionImportDescription): return ReadFunctionImport(reader)
-        case byte(TableImportDescription): return ReadTableImport(reader)
+        case byte(FunctionImportDescription): return ReadFunctionIndex(reader)
+        case byte(TableImportDescription): return ReadTableIndex(reader)
         case byte(MemoryImportDescription): return nil, fmt.Errorf("Unimplemented import description %v", MemoryImportDescription)
         case byte(GlobalImportDescription): return nil, fmt.Errorf("Unimplemented import description %v", GlobalImportDescription)
     }
 
-    return InvalidImportDescription, fmt.Errorf("Unknown import description '%v'", kind)
+    return nil, fmt.Errorf("Unknown import description '%v'", kind)
 }
 
 func (module *WebAssemblyFileModule) ReadImportSection(sectionSize uint32) (*WebAssemblyImportSection, error) {
@@ -384,7 +384,7 @@ func (module *WebAssemblyFileModule) ReadImportSection(sectionSize uint32) (*Web
             return nil, err
         }
 
-        log.Printf("Import module '%v' name '%v' kind '%v'\n", moduleName, name, kind)
+        log.Printf("Import %v: module='%v' name='%v' kind= '%v'\n", i, moduleName, name, kind)
     }
 
     return nil, nil
@@ -430,8 +430,55 @@ func (section *WebAssemblyExportSection) String() string {
     return "export section"
 }
 
+type ExportDescription byte
+const (
+    InvalidExportDescription ExportDescription = 0xff
+    FunctionExportDescription ExportDescription = 0x00
+    TableExportDescription ExportDescription = 0x01
+    MemoryExportDescription ExportDescription = 0x02
+    GlobalExportDescription ExportDescription = 0x03
+)
+
+func ReadExportDescription(reader *ByteReader) (Index, error) {
+    kind, err := reader.ReadByte()
+    if err != nil {
+        return nil, err
+    }
+
+    switch kind {
+        case byte(FunctionExportDescription): return ReadFunctionIndex(reader)
+        case byte(TableExportDescription): return ReadTableIndex(reader)
+        case byte(MemoryExportDescription): return nil, fmt.Errorf("Unimplemented import description %v", MemoryExportDescription)
+        case byte(GlobalExportDescription): return nil, fmt.Errorf("Unimplemented import description %v", GlobalExportDescription)
+    }
+
+    return nil, fmt.Errorf("Unknown import description '%v'", kind)
+}
+
 func (module *WebAssemblyFileModule) ReadExportSection(size uint32) (*WebAssemblyExportSection, error) {
     log.Printf("Read export section size %v\n", size)
+
+    sectionReader := NewByteReader(io.LimitReader(module.reader, int64(size)))
+
+    exports, err := ReadU32(sectionReader)
+    if err != nil {
+        return nil, err
+    }
+
+    var i uint32
+    for i = 0; i < exports; i++ {
+        name, err := ReadName(sectionReader)
+        if err != nil {
+            return nil, fmt.Errorf("Could not read name from export section for export %v: %v", i, err)
+        }
+
+        description, err := ReadExportDescription(sectionReader)
+        if err != nil {
+            return nil, fmt.Errorf("Could not read description for export %v: %v", i, err)
+        }
+
+        log.Printf("Export %v: name='%v' description=%v\n", i, name, description)
+    }
 
     return nil, nil
 }
