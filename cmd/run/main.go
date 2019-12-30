@@ -259,7 +259,6 @@ func (module *WebAssemblyFileModule) ReadTypeSection(sectionSize uint32) (*WebAs
         return nil, fmt.Errorf("Error reading type section: not all bytes were read")
     }
 
-
     return nil, nil
 }
 
@@ -318,11 +317,16 @@ const (
 )
 
 type Index interface {
+    String() string
 }
 
 type FunctionIndex struct {
     Index
     Id uint32
+}
+
+func (index *FunctionIndex) String() string {
+    return fmt.Sprintf("function index %v", index.Id)
 }
 
 func ReadFunctionIndex(reader *ByteReader) (*FunctionIndex, error) {
@@ -341,6 +345,10 @@ type TableIndex struct {
     Id uint32
 }
 
+func (index *TableIndex) String() string {
+    return fmt.Sprintf("table index %v", index.Id)
+}
+
 func ReadTableIndex(reader *ByteReader) (*TableIndex, error) {
     index, err := ReadU32(reader)
     if err != nil {
@@ -349,6 +357,39 @@ func ReadTableIndex(reader *ByteReader) (*TableIndex, error) {
 
     return &TableIndex{
         Id: index,
+    }, nil
+}
+
+type GlobalIndex struct {
+    Index
+    ValueType ValueType
+    Mutable bool
+}
+
+func (global *GlobalIndex) String() string {
+    return fmt.Sprintf("global index value type=0x%x mutable=%v", global.ValueType, global.Mutable)
+}
+
+func ReadGlobalIndex(reader *ByteReader) (*GlobalIndex, error) {
+    value, err := ReadValueType(reader)
+    if err != nil {
+        return nil, fmt.Errorf("Could not read value type for global index: %v", err)
+    }
+
+    mutable, err := reader.ReadByte()
+    if err != nil {
+        return nil, fmt.Errorf("Could not read mutable state for global index: %v", err)
+    }
+
+    if mutable != 0 && mutable != 1 {
+        return nil, fmt.Errorf("Global index mutable value was not 0 (const) or 1 (var), instead it was %v", mutable)
+    }
+
+    isConst := mutable == 0
+
+    return &GlobalIndex{
+        ValueType: value,
+        Mutable: isConst,
     }, nil
 }
 
@@ -362,7 +403,7 @@ func ReadImportDescription(reader *ByteReader) (Index, error) {
         case byte(FunctionImportDescription): return ReadFunctionIndex(reader)
         case byte(TableImportDescription): return ReadTableIndex(reader)
         case byte(MemoryImportDescription): return nil, fmt.Errorf("Unimplemented import description %v", MemoryImportDescription)
-        case byte(GlobalImportDescription): return nil, fmt.Errorf("Unimplemented import description %v", GlobalImportDescription)
+        case byte(GlobalImportDescription): return ReadGlobalIndex(reader)
     }
 
     return nil, fmt.Errorf("Unknown import description '%v'", kind)
@@ -377,6 +418,8 @@ func (module *WebAssemblyFileModule) ReadImportSection(sectionSize uint32) (*Web
     if err != nil {
         return nil, fmt.Errorf("Could not read imports: %v", err)
     }
+
+    log.Printf("Have %v imports\n", imports)
 
     var i uint32
     for i = 0; i < imports; i++ {
@@ -395,7 +438,7 @@ func (module *WebAssemblyFileModule) ReadImportSection(sectionSize uint32) (*Web
             return nil, err
         }
 
-        log.Printf("Import %v: module='%v' name='%v' kind= '%v'\n", i, moduleName, name, kind)
+        log.Printf("Import %v: module='%v' name='%v' kind='%v'\n", i, moduleName, name, kind.String())
     }
 
     return nil, nil
@@ -757,6 +800,45 @@ func (module *WebAssemblyFileModule) ReadElementSection(size uint32) (*WebAssemb
     return nil, nil
 }
 
+type WebAssemblyCustomSection struct {
+    WebAssemblySection
+}
+
+func (section *WebAssemblyCustomSection) String() string {
+    return "custom section"
+}
+
+func (module *WebAssemblyFileModule) ReadCustomSection(size uint32) (*WebAssemblyCustomSection, error) {
+    log.Printf("Read custom section size %v\n", size)
+    sectionReader := NewByteReader(io.LimitReader(module.reader, int64(size)))
+
+    name, err := ReadName(sectionReader)
+    if err != nil {
+        return nil, fmt.Errorf("Could not read name from custom section: %v", err)
+    }
+
+    for {
+        raw, err := sectionReader.ReadByte()
+        if errors.Is(err, io.EOF){
+            break
+        }
+        if err != nil {
+            return nil, fmt.Errorf("Could not read bytes from custom section: %v", err)
+        }
+
+        _ = raw
+    }
+
+    _, err = sectionReader.ReadByte()
+    if err == nil {
+        return nil, fmt.Errorf("Error reading custom section: not all bytes were read")
+    }
+
+
+    log.Printf("Custom section '%v'\n", name)
+    return nil, nil
+}
+
 const (
     CustomSection byte = 0
     TypeSection byte = 1
@@ -789,7 +871,7 @@ func (module *WebAssemblyFileModule) ReadSection() (WebAssemblySection, error) {
     }
 
     switch sectionId {
-        case CustomSection: return nil, fmt.Errorf("Unimplemented section %v: custom section", sectionId)
+        case CustomSection: return module.ReadCustomSection(sectionSize)
         case TypeSection: return module.ReadTypeSection(sectionSize)
         case ImportSection: return module.ReadImportSection(sectionSize)
         case FunctionSection: return module.ReadFunctionSection(sectionSize)
@@ -804,6 +886,17 @@ func (module *WebAssemblyFileModule) ReadSection() (WebAssemblySection, error) {
     }
 
     return nil, fmt.Errorf("Unknown section id %v", sectionId)
+}
+
+/* Contains all the sections */
+type WebAssemblyModule struct {
+    TypeSection *WebAssemblyTypeSection
+    ImportSection *WebAssemblyImportSection
+    FunctionSection *WebAssemblyFunctionSection
+    TableSection *WebAssemblyTableSection
+    ExportSection *WebAssemblyExportSection
+    ElementSection *WebAssemblyElementSection
+    CodeSection *WebAssemblyCodeSection
 }
 
 func run(path string) error {
@@ -837,7 +930,7 @@ func run(path string) error {
             return nil
         }
 
-        log.Printf("Section %v\n", section.String())
+        log.Printf("Read section '%v'\n", section.String())
     }
 
     return nil
