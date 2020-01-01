@@ -94,14 +94,19 @@ func ReadU32(reader io.ByteReader) (uint32, error) {
 
     count := 0
 
+    var low byte = 0b1111111
+    var high byte = 1 << 7
+
     for {
         next, err := reader.ReadByte()
         if err != nil {
             return 0, err
         }
 
-        result = result | uint32((next & 0b1111111) << shift)
-        if next & (1<<7) == 0 {
+        use := uint32(next & low)
+
+        result = result | (use << shift)
+        if next & high == 0 {
             return result, nil
         }
 
