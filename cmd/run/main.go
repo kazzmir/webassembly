@@ -398,16 +398,56 @@ func ReadGlobalIndex(reader *ByteReader) (*GlobalIndex, error) {
     }, nil
 }
 
-func ReadImportDescription(reader *ByteReader) (Index, error) {
+type MemoryImportType struct {
+    Import
+    Limit Limit
+}
+
+func (memory *MemoryImportType) String() string {
+    return fmt.Sprintf("memory %v", memory.Limit)
+}
+
+func ReadMemoryType(reader *ByteReader) (*MemoryImportType, error) {
+    limit, err := ReadLimit(reader)
+    if err != nil {
+        return nil, err
+    }
+
+    return &MemoryImportType{Limit: limit}, nil
+}
+
+type Import interface {
+    String() string
+}
+
+type FunctionImport struct {
+    Import
+    Index uint32
+}
+
+func (index *FunctionImport) String() string {
+    return fmt.Sprintf("function import index=%v", index.Index)
+}
+
+func ReadFunctionImport(reader *ByteReader) (*FunctionImport, error) {
+    index, err := ReadU32(reader)
+    if err != nil {
+        return nil, fmt.Errorf("Could not read function index: %v", err)
+    }
+
+    return &FunctionImport{Index: index}, nil
+}
+
+func ReadImportDescription(reader *ByteReader) (Import, error) {
     kind, err := reader.ReadByte()
     if err != nil {
         return nil, err
     }
 
     switch kind {
-        case byte(FunctionImportDescription): return ReadFunctionIndex(reader)
+        case byte(FunctionImportDescription): return ReadFunctionImport(reader)
         case byte(TableImportDescription): return ReadTableIndex(reader)
-        case byte(MemoryImportDescription): return nil, fmt.Errorf("Unimplemented import description %v", MemoryImportDescription)
+        case byte(MemoryImportDescription): return ReadMemoryType(reader)
         case byte(GlobalImportDescription): return ReadGlobalIndex(reader)
     }
 
@@ -495,6 +535,24 @@ func (section *WebAssemblyExportSection) String() string {
     return "export section"
 }
 
+type MemoryIndex struct {
+    Index
+    Id uint32
+}
+
+func (memory *MemoryIndex) String() string {
+    return fmt.Sprintf("memory index id=%v", memory.Id)
+}
+
+func ReadMemoryIndex(reader *ByteReader) (*MemoryIndex, error) {
+    index, err := ReadU32(reader)
+    if err != nil {
+        return nil, fmt.Errorf("Could not read memory index: %v", err)
+    }
+
+    return &MemoryIndex{Id: index}, nil
+}
+
 type ExportDescription byte
 const (
     InvalidExportDescription ExportDescription = 0xff
@@ -513,8 +571,8 @@ func ReadExportDescription(reader *ByteReader) (Index, error) {
     switch kind {
         case byte(FunctionExportDescription): return ReadFunctionIndex(reader)
         case byte(TableExportDescription): return ReadTableIndex(reader)
-        case byte(MemoryExportDescription): return nil, fmt.Errorf("Unimplemented import description %v", MemoryExportDescription)
-        case byte(GlobalExportDescription): return nil, fmt.Errorf("Unimplemented import description %v", GlobalExportDescription)
+        case byte(MemoryExportDescription): return ReadMemoryIndex(reader)
+        case byte(GlobalExportDescription): return nil, fmt.Errorf("Unimplemented export description %v", GlobalExportDescription)
     }
 
     return nil, fmt.Errorf("Unknown import description '%v'", kind)
@@ -844,6 +902,72 @@ func (module *WebAssemblyFileModule) ReadCustomSection(size uint32) (*WebAssembl
     return nil, nil
 }
 
+type WebAssemblyMemorySection struct {
+    WebAssemblySection
+}
+
+func (section *WebAssemblyMemorySection) String() string {
+    return "memory section"
+}
+
+func (module *WebAssemblyFileModule) ReadMemorySection(size uint32) (*WebAssemblyMemorySection, error) {
+    log.Printf("Read memory section size %v\n", size)
+    sectionReader := NewByteReader(io.LimitReader(module.reader, int64(size)))
+
+    memories, err := ReadU32(sectionReader)
+    if err != nil {
+        return nil, fmt.Errorf("Could not read number of memory elements in memory section: %v", memories)
+    }
+
+    var i uint32
+    for i = 0; i < memories; i++ {
+        limit, err := ReadLimit(sectionReader)
+        if err != nil {
+            return nil, fmt.Errorf("Could not read memory element %v: %v", i, err)
+        }
+
+        log.Printf("Read memory element %v: %v\n", i, limit)
+
+    }
+
+    return nil, nil
+}
+
+type WebAssemblyGlobalSection struct {
+    WebAssemblySection
+}
+
+func (section *WebAssemblyGlobalSection) String() string {
+    return "global section"
+}
+
+func (module *WebAssemblyFileModule) ReadGlobalSection(size uint32) (*WebAssemblyGlobalSection, error) {
+    log.Printf("Read global section size %v\n", size)
+    sectionReader := NewByteReader(io.LimitReader(module.reader, int64(size)))
+
+    globals, err := ReadU32(sectionReader)
+    if err != nil {
+        return nil, fmt.Errorf("Could not read number of entries in the global section: %v", err)
+    }
+
+    var i uint32
+    for i = 0; i < globals; i++ {
+        global, err := ReadGlobalIndex(sectionReader)
+        if err != nil {
+            return nil, fmt.Errorf("Could not read global element %v: %v", i, err)
+        }
+
+        expressions, err := ReadExpressionSequence(sectionReader)
+        if err != nil {
+            return nil, fmt.Errorf("Could not read expressions for global %v: %v", i, err)
+        }
+
+        log.Printf("Global element %v: global=%v expressions=%v\n", i, global, expressions)
+    }
+
+    return nil, nil
+}
+
 const (
     CustomSection byte = 0
     TypeSection byte = 1
@@ -881,8 +1005,8 @@ func (module *WebAssemblyFileModule) ReadSection() (WebAssemblySection, error) {
         case ImportSection: return module.ReadImportSection(sectionSize)
         case FunctionSection: return module.ReadFunctionSection(sectionSize)
         case TableSection: return module.ReadTableSection(sectionSize)
-        case MemorySection: return nil, fmt.Errorf("Unimplemented section %v: memory section", sectionId)
-        case GlobalSection: return nil, fmt.Errorf("Unimplemented section %v: global section", sectionId)
+        case MemorySection: return module.ReadMemorySection(sectionSize)
+        case GlobalSection: return module.ReadGlobalSection(sectionSize)
         case ExportSection: return module.ReadExportSection(sectionSize)
         case StartSection: return nil, fmt.Errorf("Unimplemented section %v: start section", sectionId)
         case ElementSection: return module.ReadElementSection(sectionSize)
