@@ -120,6 +120,51 @@ func ReadU32(reader io.ByteReader) (uint32, error) {
     }
 }
 
+func ReadSignedLEB128(reader io.ByteReader, size int64) (int64, error) {
+    var result int64
+    var shift int64
+
+    count := 0
+
+    var low byte = 0b1111111
+    var high byte = 1 << 7
+
+    for {
+        next, err := reader.ReadByte()
+        if err != nil {
+            return 0, err
+        }
+
+        use := int64(next & low)
+
+        result = result | (use << shift)
+        shift += 7
+
+        if next & high == 0 {
+            if shift < size && next & 0x40 == 0x40 {
+                result = -result
+            }
+
+            return result, nil
+        }
+
+        /* Safety check */
+        count += 1
+        if count > 20 {
+            return 0, fmt.Errorf("Read too many bytes in a LEB128 integer")
+        }
+    }
+
+}
+
+func ReadS32(reader io.ByteReader) (int32, error) {
+    out, err := ReadSignedLEB128(reader, 32)
+    return int32(out), err
+}
+
+func ReadS64(reader io.ByteReader) (int64, error) {
+    return ReadSignedLEB128(reader, 64)
+}
 
 /* All integers are encoded using the LEB128 variable-length integer encoding, in either unsigned or signed variant.
  * Unsigned integers are encoded in unsigned LEB128 format. As an additional constraint, the total number of bytes encoding a value of type uNuN must not exceed ceil(N/7)ceil(N/7) bytes.
@@ -375,7 +420,7 @@ func (global *GlobalIndex) String() string {
     return fmt.Sprintf("global index value type=0x%x mutable=%v", global.ValueType, global.Mutable)
 }
 
-func ReadGlobalIndex(reader *ByteReader) (*GlobalIndex, error) {
+func ReadGlobalType(reader *ByteReader) (*GlobalIndex, error) {
     value, err := ReadValueType(reader)
     if err != nil {
         return nil, fmt.Errorf("Could not read value type for global index: %v", err)
@@ -396,6 +441,14 @@ func ReadGlobalIndex(reader *ByteReader) (*GlobalIndex, error) {
         ValueType: value,
         Mutable: isConst,
     }, nil
+}
+
+func ReadLocalIndex(reader *ByteReader) (uint32, error) {
+    return ReadU32(reader)
+}
+
+func ReadGlobalIndex(reader *ByteReader) (uint32, error) {
+    return ReadU32(reader)
 }
 
 type MemoryImportType struct {
@@ -448,7 +501,7 @@ func ReadImportDescription(reader *ByteReader) (Import, error) {
         case byte(FunctionImportDescription): return ReadFunctionImport(reader)
         case byte(TableImportDescription): return ReadTableIndex(reader)
         case byte(MemoryImportDescription): return ReadMemoryType(reader)
-        case byte(GlobalImportDescription): return ReadGlobalIndex(reader)
+        case byte(GlobalImportDescription): return ReadGlobalType(reader)
     }
 
     return nil, fmt.Errorf("Unknown import description '%v'", kind)
@@ -625,11 +678,40 @@ type Code struct {
 type Expression struct {
 }
 
+type BlockExpression struct {
+}
+
 const (
     InstructionEnd = 0x0b
 )
 
-func ReadExpressionSequence(reader *ByteReader) ([]Expression, error){
+func ReadBlockInstruction(reader *ByteReader) (BlockExpression, error) {
+    blockType, err := reader.ReadByte()
+    if err != nil {
+        return BlockExpression{}, fmt.Errorf("Could not read block type: %v", err)
+    }
+
+    if blockType == 0x40 {
+    } else {
+        /* Read the type from the byte we just read */
+        valueType, err := ReadValueType(NewByteReader(bytes.NewReader([]byte{blockType})))
+        if err != nil {
+            return BlockExpression{}, fmt.Errorf("Unable to read block type: %v", err)
+        }
+        _ = valueType
+    }
+
+    instructions, err := ReadExpressionSequence(reader)
+    if err != nil {
+        return BlockExpression{}, fmt.Errorf("Unable to read block instructions: %v", err)
+    }
+
+    _ = instructions
+
+    return BlockExpression{}, nil
+}
+
+func ReadExpressionSequence(reader *ByteReader) ([]Expression, error) {
 
     count := 0
     for {
@@ -640,12 +722,123 @@ func ReadExpressionSequence(reader *ByteReader) ([]Expression, error){
 
         log.Printf("Instruction %v: 0x%x\n", count, instruction)
 
-        count += 1
+        switch instruction {
+            /* unreachable */
+            case 0x00: break
 
-        if instruction == InstructionEnd {
-            log.Printf("Read %v instructions\n", count)
-            return nil, nil
+            /* nop */
+            case 0x01: break
+
+            /* block */
+            case 0x02:
+                block, err := ReadBlockInstruction(reader)
+                if err != nil {
+                    return nil, fmt.Errorf("Could not read block instruction %v: %v", count, err)
+                }
+
+                _ = block
+
+            /* loop */
+            case 0x03:
+                loop, err := ReadBlockInstruction(reader)
+                if err != nil {
+                    return nil, fmt.Errorf("Could not read block instruction %v: %v", count, err)
+                }
+
+                _ = loop
+
+            /* call */
+            case 0x10:
+                index, err := ReadFunctionIndex(reader)
+                if err != nil {
+                    return nil, fmt.Errorf("Could not read function index for call instruction %v: %v", count, err)
+                }
+
+                _ = index
+
+            /* termination of a block / instruction sequence */
+            case 0xb:
+                log.Printf("Read %v instructions\n", count+1)
+                return nil, nil
+
+            /* br_table */
+            case 0xe:
+                labels, err := ReadU32(reader)
+                if err != nil {
+                    return nil, fmt.Errorf("Could not read labels length for br_table instruction %v: %v", count, err)
+                }
+
+                var i uint32
+                for i = 0; i < labels; i++ {
+                    index, err := ReadU32(reader)
+                    if err != nil {
+                        return nil, fmt.Errorf("Could not read label index %v for br_table instruction %v: %v", i, count, err)
+                    }
+
+                    _ = index
+                }
+
+                lastIndex, err := ReadU32(reader)
+                if err != nil {
+                    return nil, fmt.Errorf("Could not read the last label index for br_table instruction %v: %v", count, err)
+                }
+
+                _ = lastIndex
+
+            /* local.get */
+            case 0x20:
+                local, err := ReadLocalIndex(reader)
+                if err != nil {
+                    return nil, fmt.Errorf("Could not read local index instruction %v: %v", count, err)
+                }
+
+                _ = local
+
+            /* local.set */
+            case 0x21:
+                local, err := ReadLocalIndex(reader)
+                if err != nil {
+                    return nil, fmt.Errorf("Could not read local index instruction %v: %v", count, err)
+                }
+
+                _ = local
+
+            /* global.get */
+            case 0x23:
+                global, err := ReadGlobalIndex(reader)
+                if err != nil {
+                    return nil, fmt.Errorf("Could not read global index instruction %v: %v", count, err)
+                }
+
+                _ = global
+
+            /* i32.const n */
+            case 0x41:
+                i32, err := ReadS32(reader)
+                if err != nil {
+                    return nil, fmt.Errorf("Unable to read i32 value at instruction %v: %v", count, err)
+                }
+
+                _ = i32
+
+            /* i64.const n */
+            case 0x42:
+                i64, err := ReadS64(reader)
+                if err != nil {
+                    return nil, fmt.Errorf("Unable to read i64 value at instruction %v: %v", count, err)
+                }
+
+                _ = i64
+
+            /* i32.wrap_i64 */
+            case 0xa7:
+                break
+
+            default:
+                return nil, fmt.Errorf("Unimplemented instruction 0x%x", instruction)
         }
+
+        count += 1
     }
 }
 
@@ -669,7 +862,7 @@ func ReadCode(reader *ByteReader) (Code, error) {
             return Code{}, fmt.Errorf("Could not read type of local for %v: %v", i, err)
         }
 
-        log.Printf("Local %v; size=%v type=%v\n", i, size, valueType)
+        log.Printf("Local %v; size=%v type=0x%x\n", i, size, valueType)
     }
 
     expressions, err := ReadExpressionSequence(reader)
@@ -697,6 +890,8 @@ func (module *WebAssemblyFileModule) ReadCodeSection(size uint32) (*WebAssemblyC
         if err != nil {
             return nil, fmt.Errorf("Error reading size of code %v: %v", i, err)
         }
+
+        log.Printf("Reading code entry %v size %v\n", i, size)
 
         codeReader := NewByteReader(io.LimitReader(sectionReader, int64(size)))
         code, err := ReadCode(codeReader)
@@ -952,7 +1147,7 @@ func (module *WebAssemblyFileModule) ReadGlobalSection(size uint32) (*WebAssembl
 
     var i uint32
     for i = 0; i < globals; i++ {
-        global, err := ReadGlobalIndex(sectionReader)
+        global, err := ReadGlobalType(sectionReader)
         if err != nil {
             return nil, fmt.Errorf("Could not read global element %v: %v", i, err)
         }
