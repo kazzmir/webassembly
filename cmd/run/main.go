@@ -681,14 +681,21 @@ type Expression struct {
 type BlockExpression struct {
 }
 
+type ExpressionSequenceEnd uint32
+
+const (
+    SequenceIf ExpressionSequenceEnd = iota
+    SequenceEnd ExpressionSequenceEnd = iota
+)
+
 const (
     InstructionEnd = 0x0b
 )
 
-func ReadBlockInstruction(reader *ByteReader) (BlockExpression, error) {
+func ReadBlockInstruction(reader *ByteReader, readingIf bool) (BlockExpression, ExpressionSequenceEnd, error) {
     blockType, err := reader.ReadByte()
     if err != nil {
-        return BlockExpression{}, fmt.Errorf("Could not read block type: %v", err)
+        return BlockExpression{}, 0, fmt.Errorf("Could not read block type: %v", err)
     }
 
     if blockType == 0x40 {
@@ -696,28 +703,54 @@ func ReadBlockInstruction(reader *ByteReader) (BlockExpression, error) {
         /* Read the type from the byte we just read */
         valueType, err := ReadValueType(NewByteReader(bytes.NewReader([]byte{blockType})))
         if err != nil {
-            return BlockExpression{}, fmt.Errorf("Unable to read block type: %v", err)
+            return BlockExpression{}, 0, fmt.Errorf("Unable to read block type: %v", err)
         }
         _ = valueType
     }
 
-    instructions, err := ReadExpressionSequence(reader)
+    instructions, end, err := ReadExpressionSequence(reader, readingIf)
     if err != nil {
-        return BlockExpression{}, fmt.Errorf("Unable to read block instructions: %v", err)
+        return BlockExpression{}, 0, fmt.Errorf("Unable to read block instructions: %v", err)
     }
 
     _ = instructions
 
-    return BlockExpression{}, nil
+    return BlockExpression{}, end, nil
 }
 
-func ReadExpressionSequence(reader *ByteReader) ([]Expression, error) {
+type MemoryArgument struct {
+    Align uint32
+    Offset uint32
+}
+
+func ReadMemoryArgument(reader *ByteReader) (MemoryArgument, error) {
+    align, err := ReadU32(reader)
+    if err != nil {
+        return MemoryArgument{}, fmt.Errorf("Could not read alignment of memory argument: %v", err)
+    }
+
+    offset, err := ReadU32(reader)
+    if err != nil {
+        return MemoryArgument{}, fmt.Errorf("Could not read offset of memory argument: %v", err)
+    }
+
+    return MemoryArgument{
+        Align: align,
+        Offset: offset,
+    }, nil
+}
+
+/* Read a sequence of instructions. If 'readingIf' is true then we are inside an
+ * if-expression so the sequence may end with 0x05, in which case it would
+ * be followed by an else sequence of instructions.
+ */
+func ReadExpressionSequence(reader *ByteReader, readingIf bool) ([]Expression, ExpressionSequenceEnd, error) {
 
     count := 0
     for {
         instruction, err := reader.ReadByte()
         if err != nil {
-            return nil, fmt.Errorf("Could not read instruction: %v", err)
+            return nil, 0, fmt.Errorf("Could not read instruction: %v", err)
         }
 
         log.Printf("Instruction %v: 0x%x\n", count, instruction)
@@ -731,27 +764,52 @@ func ReadExpressionSequence(reader *ByteReader) ([]Expression, error) {
 
             /* block */
             case 0x02:
-                block, err := ReadBlockInstruction(reader)
+                block, _, err := ReadBlockInstruction(reader, false)
                 if err != nil {
-                    return nil, fmt.Errorf("Could not read block instruction %v: %v", count, err)
+                    return nil, 0, fmt.Errorf("Could not read block instruction %v: %v", count, err)
                 }
 
                 _ = block
 
             /* loop */
             case 0x03:
-                loop, err := ReadBlockInstruction(reader)
+                loop, _, err := ReadBlockInstruction(reader, false)
                 if err != nil {
-                    return nil, fmt.Errorf("Could not read block instruction %v: %v", count, err)
+                    return nil, 0, fmt.Errorf("Could not read block instruction %v: %v", count, err)
                 }
 
                 _ = loop
+
+            /* if */
+            case 0x04:
+                ifBlock, end, err := ReadBlockInstruction(reader, true)
+                if err != nil {
+                    return nil, 0, fmt.Errorf("Could not read if block instruction %v: %v", count, err)
+                }
+
+                if end == SequenceIf {
+                    elseExpression, _, err := ReadExpressionSequence(reader, false)
+                    if err != nil {
+                        return nil, 0, fmt.Errorf("Could not read else expressions in if block at instruction %v: %v", count, err)
+                    }
+
+                    _ = elseExpression
+                }
+
+                _ = ifBlock
+
+            case 0x05:
+                if !readingIf {
+                    return nil, 0, fmt.Errorf("Read an else bytecode (0x5) outside of an if block at instruction %v", count)
+                }
+
+                return nil, SequenceIf, nil
 
             /* call */
             case 0x10:
                 index, err := ReadFunctionIndex(reader)
                 if err != nil {
-                    return nil, fmt.Errorf("Could not read function index for call instruction %v: %v", count, err)
+                    return nil, 0, fmt.Errorf("Could not read function index for call instruction %v: %v", count, err)
                 }
 
                 _ = index
@@ -759,20 +817,29 @@ func ReadExpressionSequence(reader *ByteReader) ([]Expression, error) {
             /* termination of a block / instruction sequence */
             case 0xb:
                 log.Printf("Read %v instructions\n", count+1)
-                return nil, nil
+                return nil, SequenceEnd, nil
+
+            /* br_if */
+            case 0xd:
+                label, err := ReadU32(reader)
+                if err != nil {
+                    return nil, 0, fmt.Errorf("Could not read label index for br_if at instruction %v: %v", count, err)
+                }
+
+                _ = label
 
             /* br_table */
             case 0xe:
                 labels, err := ReadU32(reader)
                 if err != nil {
-                    return nil, fmt.Errorf("Could not read labels length for br_table instruction %v: %v", count, err)
+                    return nil, 0, fmt.Errorf("Could not read labels length for br_table instruction %v: %v", count, err)
                 }
 
                 var i uint32
                 for i = 0; i < labels; i++ {
                     index, err := ReadU32(reader)
                     if err != nil {
-                        return nil, fmt.Errorf("Could not read label index %v for br_table instruction %v: %v", i, count, err)
+                        return nil, 0, fmt.Errorf("Could not read label index %v for br_table instruction %v: %v", i, count, err)
                     }
 
                     _ = index
@@ -780,7 +847,7 @@ func ReadExpressionSequence(reader *ByteReader) ([]Expression, error) {
 
                 lastIndex, err := ReadU32(reader)
                 if err != nil {
-                    return nil, fmt.Errorf("Could not read the last label index for br_table instruction %v: %v", count, err)
+                    return nil, 0, fmt.Errorf("Could not read the last label index for br_table instruction %v: %v", count, err)
                 }
 
                 _ = lastIndex
@@ -789,7 +856,7 @@ func ReadExpressionSequence(reader *ByteReader) ([]Expression, error) {
             case 0x20:
                 local, err := ReadLocalIndex(reader)
                 if err != nil {
-                    return nil, fmt.Errorf("Could not read local index instruction %v: %v", count, err)
+                    return nil, 0, fmt.Errorf("Could not read local index instruction %v: %v", count, err)
                 }
 
                 _ = local
@@ -798,7 +865,16 @@ func ReadExpressionSequence(reader *ByteReader) ([]Expression, error) {
             case 0x21:
                 local, err := ReadLocalIndex(reader)
                 if err != nil {
-                    return nil, fmt.Errorf("Could not read local index instruction %v: %v", count, err)
+                    return nil, 0, fmt.Errorf("Could not read local index instruction %v: %v", count, err)
+                }
+
+                _ = local
+
+            /* local.tee */
+            case 0x22:
+                local, err := ReadLocalIndex(reader)
+                if err != nil {
+                    return nil, 0, fmt.Errorf("Could not read local index instruction %v: %v", count, err)
                 }
 
                 _ = local
@@ -807,16 +883,79 @@ func ReadExpressionSequence(reader *ByteReader) ([]Expression, error) {
             case 0x23:
                 global, err := ReadGlobalIndex(reader)
                 if err != nil {
-                    return nil, fmt.Errorf("Could not read global index instruction %v: %v", count, err)
+                    return nil, 0, fmt.Errorf("Could not read global index instruction %v: %v", count, err)
                 }
 
                 _ = global
+
+            /* global.set */
+            case 0x24:
+                global, err := ReadGlobalIndex(reader)
+                if err != nil {
+                    return nil, 0, fmt.Errorf("Could not read global index instruction %v: %v", count, err)
+                }
+
+                _ = global
+
+            /* i32.load */
+            case 0x28,
+                 /* i64.load */
+                 0x29,
+                 /* f32.load */
+                 0x2a,
+                 /* f64.load */
+                 0x2b,
+                 /* i32.load8_s */
+                 0x2c,
+                 /* i32.load8_u */
+                 0x2d,
+                 /* i32.load16_s */
+                 0x2e,
+                 /* i32.load16_u */
+                 0x2f,
+                 /* i64.load8_s */
+                 0x30,
+                 /* i64.load8_u */
+                 0x31,
+                 /* i64.load16_s */
+                 0x32,
+                 /* i64.load16_u */
+                 0x33,
+                 /* i64.load32_s */
+                 0x34,
+                 /* i64.load32_u */
+                 0x35,
+                 /* i32.store */
+                 0x36,
+                 /* i64.store */
+                 0x37,
+                 /* f32.store */
+                 0x38,
+                 /* f64.store */
+                 0x39,
+                 /* i32.store8 */
+                 0x3a,
+                 /* i32.store16 */
+                 0x3b,
+                 /* i64.store8 */
+                 0x3c,
+                 /* i64.store16 */
+                 0x3d,
+                 /* i64.store32 */
+                 0x3e:
+
+                memory, err := ReadMemoryArgument(reader)
+                if err != nil {
+                    return nil, 0, fmt.Errorf("Could not read memory argument for instruction %v: %v", count, err)
+                }
+
+                _ = memory
 
             /* i32.const n */
             case 0x41:
                 i32, err := ReadS32(reader)
                 if err != nil {
-                    return nil, fmt.Errorf("Unable to read i32 value at instruction %v: %v", count, err)
+                    return nil, 0, fmt.Errorf("Unable to read i32 value at instruction %v: %v", count, err)
                 }
 
                 _ = i32
@@ -825,17 +964,264 @@ func ReadExpressionSequence(reader *ByteReader) ([]Expression, error) {
             case 0x42:
                 i64, err := ReadS64(reader)
                 if err != nil {
-                    return nil, fmt.Errorf("Unable to read i64 value at instruction %v: %v", count, err)
+                    return nil, 0, fmt.Errorf("Unable to read i64 value at instruction %v: %v", count, err)
                 }
 
                 _ = i64
 
-            /* i32.wrap_i64 */
-            case 0xa7:
+            /* No-argument instructions */
+
+                /* i32.eqz */
+            case 0x45,
+                /* i32.eq */
+                0x46,
+                /* i32.ne */
+                0x47,
+                /* i32.lt_s */
+                0x48,
+                /* i32.lt_u */
+                0x49,
+                /* i32.gt_s */
+                0x4a,
+                /* i32.gt_u */
+                0x4b,
+                /* i32.le_s */
+                0x4c,
+                /* i32.le_u */
+                0x4d,
+                /* i32.ge_s */
+                0x4e,
+                /* i32.ge_u */
+                0x4f,
+                /* i64.eqz */
+                0x50,
+                /* i64.eq */
+                0x51,
+                /* i64.ne */
+                0x52,
+                /* i64.lt_s */
+                0x53,
+                /* i64.lt_u */
+                0x54,
+                /* i64.gt_s */
+                0x55,
+                /* i64.gt_u */
+                0x56,
+                /* i64.le_s */
+                0x57,
+                /* i64.le_u */
+                0x58,
+                /* i64.ge_s */
+                0x59,
+                /* i64.ge_u */
+                0x5a,
+                /* f32.eq */
+                0x5b,
+                /* f32.ne */
+                0x5c,
+                /* f32.lt */
+                0x5d,
+                /* f32.gt */
+                0x5e,
+                /* f32.le */
+                0x5f,
+                /* f32.ge */
+                0x60,
+                /* f64.eq */
+                0x61,
+                /* f64.ne */
+                0x62,
+                /* f64.lt */
+                0x63,
+                /* f64.gt */
+                0x64,
+                /* f64.le */
+                0x65,
+                /* f64.ge */
+                0x66,
+                /* i32.clz */
+                0x67,
+                /* i32.ctz */
+                0x68,
+                /* i32.popcnt */
+                0x69,
+                /* i32.add */
+                0x6a,
+                /* i32.sub */
+                0x6b,
+                /* i32.mul */
+                0x6c,
+                /* i32.div_s */
+                0x6d,
+                /* i32.div_u */
+                0x6e,
+                /* i32.rem_s */
+                0x6f,
+                /* i32.rem_u */
+                0x70,
+                /* i32.and */
+                0x71,
+                /* i32.or */
+                0x72,
+                /* i32.xor */
+                0x73,
+                /* i32.shl */
+                0x74,
+                /* i32.shr_s */
+                0x75,
+                /* i32.shr_u */
+                0x76,
+                /* i32.rotl */
+                0x77,
+                /* i32.rotr */
+                0x78,
+                /* i64.clz */
+                0x79,
+                /* i64.ctz */
+                0x7a,
+                /* i64.popcnt */
+                0x7b,
+                /* i64.add */
+                0x7c,
+                /* i64.sub */
+                0x7d,
+                /* i64.mul */
+                0x7e,
+                /* i64.div_s */
+                0x7f,
+                /* i64.div_u */
+                0x80,
+                /* i64.rem_s */
+                0x81,
+                /* i64.rem_u */
+                0x82,
+                /* i64.and */
+                0x83,
+                /* i64.or */
+                0x84,
+                /* i64.xor */
+                0x85,
+                /* i64.shl */
+                0x86,
+                /* i64.shr_s */
+                0x87,
+                /* i64.shr_u */
+                0x88,
+                /* i64.rotl */
+                0x89,
+                /* i64.rotr */
+                0x8a,
+                /* f32.abs */
+                0x8b,
+                /* f32.neg */
+                0x8c,
+                /* f32.ceil */
+                0x8d,
+                /* f32.floor */
+                0x8e,
+                /* f32.trunc */
+                0x8f,
+                /* f32.nearest */
+                0x90,
+                /* f32.sqrt */
+                0x91,
+                /* f32.add */
+                0x92,
+                /* f32.sub */
+                0x93,
+                /* f32.mul */
+                0x94,
+                /* f32.div */
+                0x95,
+                /* f32.min */
+                0x96,
+                /* f32.max */
+                0x97,
+                /* f32.copysign */
+                0x98,
+                /* f64.abs */
+                0x99,
+                /* f64.neg */
+                0x9a,
+                /* f64.ceil */
+                0x9b,
+                /* f64.floor */
+                0x9c,
+                /* f64.trunc */
+                0x9d,
+                /* f64.nearest */
+                0x9e,
+                /* f64.sqrt */
+                0x9f,
+                /* f64.add */
+                0xa0,
+                /* f64.sub */
+                0xa1,
+                /* f64.mul */
+                0xa2,
+                /* f64.div */
+                0xa3,
+                /* f64.min */
+                0xa4,
+                /* f64.max */
+                0xa5,
+                /* f64.copysign */
+                0xa6,
+                /* i32.wrap_i64 */
+                0xa7,
+                /* i32.trunc_f32_s */
+                0xa8,
+                /* i32.trunc_f32_u */
+                0xa9,
+                /* i32.trunc_f64_s */
+                0xaa,
+                /* i32.trunc_f64_u */
+                0xab,
+                /* i64.extend_i32_s */
+                0xac,
+                /* i64.extend_i32_u */
+                0xad,
+                /* i64.trunc_f32_s */
+                0xae,
+                /* i64.trunc_f32_u */
+                0xaf,
+                /* i64.trunc_f64_s */
+                0xb0,
+                /* i64.trunc_f64_u */
+                0xb1,
+                /* f32.convert_i32_s */
+                0xb2,
+                /* f32.convert_i32_u */
+                0xb3,
+                /* f32.convert_i64_s */
+                0xb4,
+                /* f32.convert_i64_u */
+                0xb5,
+                /* f32.demote_f64 */
+                0xb6,
+                /* f64.convert_i32_s */
+                0xb7,
+                /* f64.convert_i32_u */
+                0xb8,
+                /* f64.convert_i64_s */
+                0xb9,
+                /* f64.convert_i64_u */
+                0xba,
+                /* f64.promote_f32 */
+                0xbb,
+                /* i32.reinterpret_f32 */
+                0xbc,
+                /* i64.reinterpret_f64 */
+                0xbd,
+                /* f32.reinterpret_i32 */
+                0xbe,
+                /* f64.reinterpret_i64 */
+                0xbf:
+
                 break
 
             default:
-                return nil, fmt.Errorf("Unimplemented instruction 0x%x", instruction)
+                return nil, 0, fmt.Errorf("Unimplemented instruction 0x%x", instruction)
         }
 
         count += 1
@@ -865,7 +1251,7 @@ func ReadCode(reader *ByteReader) (Code, error) {
         log.Printf("Local %v; size=%v type=0x%x\n", i, size, valueType)
     }
 
-    expressions, err := ReadExpressionSequence(reader)
+    expressions, _, err := ReadExpressionSequence(reader, false)
     if err != nil {
         return Code{}, fmt.Errorf("Could not read expressions: %v", err)
     }
@@ -1027,7 +1413,7 @@ func (module *WebAssemblyFileModule) ReadElementSection(size uint32) (*WebAssemb
             return nil, fmt.Errorf("Could not read type index for element %v: %v", i, err)
         }
 
-        expressions, err := ReadExpressionSequence(sectionReader)
+        expressions, _, err := ReadExpressionSequence(sectionReader, false)
         if err != nil {
             return nil, fmt.Errorf("Could not read expressions for element %v: %v", i, err)
         }
@@ -1152,7 +1538,7 @@ func (module *WebAssemblyFileModule) ReadGlobalSection(size uint32) (*WebAssembl
             return nil, fmt.Errorf("Could not read global element %v: %v", i, err)
         }
 
-        expressions, err := ReadExpressionSequence(sectionReader)
+        expressions, _, err := ReadExpressionSequence(sectionReader, false)
         if err != nil {
             return nil, fmt.Errorf("Could not read expressions for global %v: %v", i, err)
         }
