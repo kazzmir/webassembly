@@ -166,6 +166,24 @@ func ReadS64(reader io.ByteReader) (int64, error) {
     return ReadSignedLEB128(reader, 64)
 }
 
+func ReadFloat32(reader io.Reader) (float32, error) {
+    var value float32
+    err := binary.Read(reader, binary.LittleEndian, &value)
+    if err != nil {
+        return 0, err
+    }
+    return value, nil
+}
+
+func ReadFloat64(reader io.Reader) (float64, error) {
+    var value float64
+    err := binary.Read(reader, binary.LittleEndian, &value)
+    if err != nil {
+        return 0, err
+    }
+    return value, nil
+}
+
 /* All integers are encoded using the LEB128 variable-length integer encoding, in either unsigned or signed variant.
  * Unsigned integers are encoded in unsigned LEB128 format. As an additional constraint, the total number of bytes encoding a value of type uNuN must not exceed ceil(N/7)ceil(N/7) bytes.
  */
@@ -798,6 +816,7 @@ func ReadExpressionSequence(reader *ByteReader, readingIf bool) ([]Expression, E
 
                 _ = ifBlock
 
+            /* else */
             case 0x05:
                 if !readingIf {
                     return nil, 0, fmt.Errorf("Read an else bytecode (0x5) outside of an if block at instruction %v", count)
@@ -814,10 +833,28 @@ func ReadExpressionSequence(reader *ByteReader, readingIf bool) ([]Expression, E
 
                 _ = index
 
+            /* call_indirect */
+            case 0x11:
+                index, err := ReadU32(reader)
+                if err != nil {
+                    return nil, 0, fmt.Errorf("Could not read type index for call_indirect instruction %v: %v", count, err)
+                }
+
+                _ = index
+
             /* termination of a block / instruction sequence */
             case 0xb:
                 log.Printf("Read %v instructions\n", count+1)
                 return nil, SequenceEnd, nil
+
+            /* br */
+            case 0xc:
+                label, err := ReadU32(reader)
+                if err != nil {
+                    return nil, 0, fmt.Errorf("Could not read label index for br at instruction %v: %v", count, err)
+                }
+
+                _ = label
 
             /* br_if */
             case 0xd:
@@ -851,6 +888,18 @@ func ReadExpressionSequence(reader *ByteReader, readingIf bool) ([]Expression, E
                 }
 
                 _ = lastIndex
+
+            /* return */
+            case 0xf:
+                break
+
+            /* drop */
+            case 0x1a:
+                break
+
+            /* select */
+            case 0x1b:
+                break
 
             /* local.get */
             case 0x20:
@@ -951,6 +1000,25 @@ func ReadExpressionSequence(reader *ByteReader, readingIf bool) ([]Expression, E
 
                 _ = memory
 
+            /* memoery.size */
+            case 0x3f,
+                /* memory.grow */
+                0x40:
+
+                name := "memory.size"
+                if instruction == 0x40 {
+                    name = "memory.grow"
+                }
+
+                zero, err := reader.ReadByte()
+                if err != nil {
+                    return nil, 0, fmt.Errorf("Could not read extra zero-byte for %s instruction %v: %v", name, count, err)
+                }
+
+                if zero != 0 {
+                    return nil, 0, fmt.Errorf("Expected byte following %s instruction %v to be 0 but got %v", name, count, zero)
+                }
+
             /* i32.const n */
             case 0x41:
                 i32, err := ReadS32(reader)
@@ -968,6 +1036,24 @@ func ReadExpressionSequence(reader *ByteReader, readingIf bool) ([]Expression, E
                 }
 
                 _ = i64
+
+            /* f32.const */
+            case 0x43:
+                f32, err := ReadFloat32(reader)
+                if err != nil {
+                    return nil, 0, fmt.Errorf("Unable to read f32 value at instruction %v: %v", count, err)
+                }
+
+                _ = f32
+
+            /* f64.const */
+            case 0x44:
+                f64, err := ReadFloat64(reader)
+                if err != nil {
+                    return nil, 0, fmt.Errorf("Unable to read f64 value at instruction %v: %v", count, err)
+                }
+
+                _ = f64
 
             /* No-argument instructions */
 
