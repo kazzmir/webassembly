@@ -1635,6 +1635,52 @@ func (module *WebAssemblyFileModule) ReadGlobalSection(size uint32) (*WebAssembl
     return nil, nil
 }
 
+type WebAssemblyDataSection struct {
+    WebAssemblySection
+}
+
+func (section *WebAssemblyDataSection) String() string {
+    return "data section"
+}
+
+func (module *WebAssemblyFileModule) ReadDataSection(size uint32) (*WebAssemblyDataSection, error) {
+    log.Printf("Read data section size %v\n", size)
+    sectionReader := NewByteReader(io.LimitReader(module.reader, int64(size)))
+
+    datas, err := ReadU32(sectionReader)
+    if err != nil {
+        return nil, fmt.Errorf("Could not read number of entries in the data section: %v", err)
+    }
+
+    var i uint32
+    for i = 0; i < datas; i++ {
+        memoryIndex, err := ReadMemoryIndex(sectionReader)
+        if err != nil {
+            return nil, fmt.Errorf("Could not read memory index for data entry %v: %v", i, err)
+        }
+
+        expressions, _, err := ReadExpressionSequence(sectionReader, false)
+        if err != nil {
+            return nil, fmt.Errorf("Could not read expressions for data entry %v: %v", i, err)
+        }
+
+        bytes, err := ReadU32(sectionReader)
+        if err != nil {
+            return nil, fmt.Errorf("Could not read init vector for data entry %v: %v", i, err)
+        }
+
+        initVector := make([]byte, bytes)
+        _, err = io.ReadFull(sectionReader, initVector)
+        if err != nil {
+            return nil, fmt.Errorf("Could not read %v bytes of init vector for data entry %v: %v", bytes, i, err)
+        }
+
+        log.Printf("Data entry %v: index=%v expressions=%v init-vector=%v\n", i, memoryIndex, expressions, initVector)
+    }
+
+    return nil, nil
+}
+
 const (
     CustomSection byte = 0
     TypeSection byte = 1
@@ -1678,7 +1724,7 @@ func (module *WebAssemblyFileModule) ReadSection() (WebAssemblySection, error) {
         case StartSection: return nil, fmt.Errorf("Unimplemented section %v: start section", sectionId)
         case ElementSection: return module.ReadElementSection(sectionSize)
         case CodeSection: return module.ReadCodeSection(sectionSize)
-        case DataSection: return nil, fmt.Errorf("Unimplemented section %v: data section", sectionId)
+        case DataSection: return module.ReadDataSection(sectionSize)
     }
 
     return nil, fmt.Errorf("Unknown section id %v", sectionId)
