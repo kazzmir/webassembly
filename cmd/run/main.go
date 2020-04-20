@@ -6,6 +6,7 @@ import (
     "bufio"
     "io"
     "fmt"
+    "strings"
     "bytes"
     "errors"
     "unicode/utf8"
@@ -78,10 +79,15 @@ func (module *WebAssemblyFileModule) ReadSectionId() (byte, error) {
 
 type WebAssemblySection interface {
     String() string
+    ConvertToWast() string
 }
 
 type WebAssemblyTypeSection struct {
     WebAssemblySection
+}
+
+func (section *WebAssemblyTypeSection) ConvertToWast() string {
+    return "(type)"
 }
 
 func (section *WebAssemblyTypeSection) String() string {
@@ -564,6 +570,10 @@ type WebAssemblyFunctionSection struct {
     WebAssemblySection
 }
 
+func (section *WebAssemblyFunctionSection) ConvertToWast() string {
+    return "(function)"
+}
+
 func (section *WebAssemblyFunctionSection) String() string {
     return "function section"
 }
@@ -600,6 +610,10 @@ func (module *WebAssemblyFileModule) ReadFunctionSection(size uint32) (*WebAssem
 
 type WebAssemblyExportSection struct {
     WebAssemblySection
+}
+
+func (section *WebAssemblyExportSection) ConvertToWast() string {
+    return "(export)"
 }
 
 func (section *WebAssemblyExportSection) String() string {
@@ -684,6 +698,10 @@ func (module *WebAssemblyFileModule) ReadExportSection(size uint32) (*WebAssembl
 
 type WebAssemblyCodeSection struct {
     WebAssemblySection
+}
+
+func (section *WebAssemblyCodeSection) ConvertToWast() string {
+    return "(code)"
 }
 
 func (section *WebAssemblyCodeSection) String() string {
@@ -1391,6 +1409,10 @@ type WebAssemblyTableSection struct {
     WebAssemblySection
 }
 
+func (section *WebAssemblyTableSection) ConvertToWast() string {
+    return "(table)"
+}
+
 func (section *WebAssemblyTableSection) String() string {
     return "table section"
 }
@@ -1477,6 +1499,10 @@ func (module *WebAssemblyFileModule) ReadTableSection(size uint32) (*WebAssembly
 
 type WebAssemblyElementSection struct {
     WebAssemblySection
+}
+
+func (section *WebAssemblyElementSection) ConvertToWast() string {
+    return "(element)"
 }
 
 func (section *WebAssemblyElementSection) String() string {
@@ -1731,6 +1757,7 @@ func (module *WebAssemblyFileModule) ReadSection() (WebAssemblySection, error) {
 }
 
 /* Contains all the sections */
+/*
 type WebAssemblyModule struct {
     TypeSection *WebAssemblyTypeSection
     ImportSection *WebAssemblyImportSection
@@ -1740,42 +1767,68 @@ type WebAssemblyModule struct {
     ElementSection *WebAssemblyElementSection
     CodeSection *WebAssemblyCodeSection
 }
+*/
 
-func run(path string) error {
+type WebAssemblyModule struct {
+    Sections []WebAssemblySection
+}
+
+func (module *WebAssemblyModule) AddSection(section WebAssemblySection) {
+    module.Sections = append(module.Sections, section)
+}
+
+func (module *WebAssemblyModule) ConvertToWast() string {
+    var out strings.Builder
+
+    out.WriteString("(module\n")
+    for _, section := range module.Sections {
+        out.WriteString("  ")
+        out.WriteString(section.ConvertToWast())
+        out.WriteString("\n")
+    }
+    out.WriteString(")")
+
+    return out.String()
+}
+
+func parse(path string) (WebAssemblyModule, error) {
     module, err := WebAssemblyNew(path)
     if err != nil {
-        return err
+        return WebAssemblyModule{}, err
     }
 
     defer module.Close()
 
     err = module.ReadMagic()
     if err != nil {
-        return err
+        return WebAssemblyModule{}, err
     }
 
     version, err := module.ReadVersion()
     if err != nil {
-        return err
+        return WebAssemblyModule{}, err
     }
 
     if version != 1 {
         log.Printf("Warning: unexpected module version %v. Expected 1\n", version)
     }
 
+    var moduleOut WebAssemblyModule
+
     for {
         section, err := module.ReadSection()
         if err != nil {
-            return err
+            return WebAssemblyModule{}, err
         }
         if section == nil {
-            return nil
+            return moduleOut, nil
         }
 
         log.Printf("Read section '%v'\n", section.String())
+        moduleOut.AddSection(section)
     }
 
-    return nil
+    return WebAssemblyModule{}, nil
 }
 
 func main(){
@@ -1783,9 +1836,11 @@ func main(){
     log.Printf("Web assembly runner\n")
 
     if len(os.Args) > 1 {
-        err := run(os.Args[1])
+        module, err := parse(os.Args[1])
         if err != nil {
             log.Printf("Error: %v\n", err)
+        } else {
+            log.Println(module.ConvertToWast())
         }
     } else {
         log.Printf("Give a webassembly file to run\n")
