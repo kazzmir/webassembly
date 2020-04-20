@@ -84,10 +84,31 @@ type WebAssemblySection interface {
 
 type WebAssemblyTypeSection struct {
     WebAssemblySection
+
+    Functions []WebAssemblyFunction
+}
+
+func (section *WebAssemblyTypeSection) AddFunctionType(function WebAssemblyFunction) {
+    section.Functions = append(section.Functions, function)
 }
 
 func (section *WebAssemblyTypeSection) ConvertToWast() string {
-    return "(type)"
+    var out strings.Builder
+    out.WriteString("(type ")
+    for _, function := range section.Functions {
+        out.WriteString("(func ")
+        for _, input := range function.InputTypes {
+            out.WriteString(input.ConvertToWast())
+        }
+        out.WriteString("(result ")
+        for _, output := range function.OutputTypes {
+            out.WriteString(output.ConvertToWast())
+        }
+        out.WriteString(")")
+        out.WriteString(")")
+    }
+    out.WriteString(")")
+    return out.String()
 }
 
 func (section *WebAssemblyTypeSection) String() string {
@@ -206,6 +227,17 @@ const (
     ValueTypeF64 ValueType = 0x7c
 )
 
+func (value *ValueType) ConvertToWast() string {
+    switch *value {
+        case InvalidValueType: return "invalid"
+        case ValueTypeI32: return "i32"
+        case ValueTypeI64: return "i64"
+        case ValueTypeF32: return "f32"
+        case ValueTypeF64: return "f64"
+        default: return "?"
+    }
+}
+
 func ReadValueType(reader io.ByteReader) (ValueType, error) {
     kind, err := reader.ReadByte()
     if err != nil {
@@ -243,30 +275,38 @@ func ReadTypeVector(reader io.ByteReader) ([]ValueType, error) {
 
 const FunctionTypeMagic = 0x60
 
-func (module *WebAssemblyFileModule) ReadFunctionType(reader io.Reader) error {
+type WebAssemblyFunction struct {
+    InputTypes []ValueType
+    OutputTypes []ValueType
+}
+
+func (module *WebAssemblyFileModule) ReadFunctionType(reader io.Reader) (WebAssemblyFunction, error) {
     buffer := NewByteReader(reader)
     magic, err := buffer.ReadByte()
     if err != nil {
-        return fmt.Errorf("Could not read function type: %v", err)
+        return WebAssemblyFunction{}, fmt.Errorf("Could not read function type: %v", err)
     }
 
     if magic != FunctionTypeMagic {
-        return fmt.Errorf("Expected to read function type 0x%x but got 0x%x\n", magic, FunctionTypeMagic)
+        return WebAssemblyFunction{}, fmt.Errorf("Expected to read function type 0x%x but got 0x%x\n", magic, FunctionTypeMagic)
     }
 
     inputTypes, err := ReadTypeVector(buffer)
     if err != nil {
-        return err
+        return WebAssemblyFunction{}, err
     }
 
     outputTypes, err := ReadTypeVector(buffer)
     if err != nil {
-        return err
+        return WebAssemblyFunction{}, err
     }
 
     log.Printf("Function %v -> %v\n", inputTypes, outputTypes)
 
-    return nil
+    return WebAssemblyFunction{
+        InputTypes: inputTypes,
+        OutputTypes: outputTypes,
+    }, nil
 }
 
 type ByteReader struct {
@@ -317,15 +357,19 @@ func (module *WebAssemblyFileModule) ReadTypeSection(sectionSize uint32) (*WebAs
 
     // log.Printf("Read %v function types\n", length)
 
+    var section WebAssemblyTypeSection
+
     var i uint32
     for i = 0; i < length; i++ {
 
         // log.Printf("Bytes remaining %v\n", sectionReader.N)
 
-        err := module.ReadFunctionType(sectionReader)
+        function, err := module.ReadFunctionType(sectionReader)
         if err != nil {
-            return nil, err
+            return &section, err
         }
+
+        section.AddFunctionType(function)
     }
 
     _, err = sectionReader.ReadByte()
@@ -333,11 +377,15 @@ func (module *WebAssemblyFileModule) ReadTypeSection(sectionSize uint32) (*WebAs
         return nil, fmt.Errorf("Error reading type section: not all bytes were read")
     }
 
-    return nil, nil
+    return &section, nil
 }
 
 type WebAssemblyImportSection struct {
     WebAssemblySection
+}
+
+func (section *WebAssemblyImportSection) ConvertToWast() string {
+    return "(import)"
 }
 
 func (section *WebAssemblyImportSection) String() string {
