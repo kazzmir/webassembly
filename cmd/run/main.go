@@ -83,8 +83,6 @@ type WebAssemblySection interface {
 }
 
 type WebAssemblyTypeSection struct {
-    WebAssemblySection
-
     Functions []WebAssemblyFunction
 }
 
@@ -99,10 +97,12 @@ func (section *WebAssemblyTypeSection) ConvertToWast() string {
         out.WriteString("(func ")
         for _, input := range function.InputTypes {
             out.WriteString(input.ConvertToWast())
+            out.WriteByte(' ')
         }
         out.WriteString("(result ")
         for _, output := range function.OutputTypes {
             out.WriteString(output.ConvertToWast())
+            out.WriteByte(' ')
         }
         out.WriteString(")")
         out.WriteString(")")
@@ -381,7 +381,6 @@ func (module *WebAssemblyFileModule) ReadTypeSection(sectionSize uint32) (*WebAs
 }
 
 type WebAssemblyImportSection struct {
-    WebAssemblySection
 }
 
 func (section *WebAssemblyImportSection) ConvertToWast() string {
@@ -443,7 +442,6 @@ type Index interface {
 }
 
 type FunctionIndex struct {
-    Index
     Id uint32
 }
 
@@ -546,7 +544,6 @@ type Import interface {
 }
 
 type FunctionImport struct {
-    Import
     Index uint32
 }
 
@@ -615,7 +612,6 @@ func (module *WebAssemblyFileModule) ReadImportSection(sectionSize uint32) (*Web
 }
 
 type WebAssemblyFunctionSection struct {
-    WebAssemblySection
 }
 
 func (section *WebAssemblyFunctionSection) ConvertToWast() string {
@@ -657,7 +653,6 @@ func (module *WebAssemblyFileModule) ReadFunctionSection(size uint32) (*WebAssem
 }
 
 type WebAssemblyExportSection struct {
-    WebAssemblySection
 }
 
 func (section *WebAssemblyExportSection) ConvertToWast() string {
@@ -745,7 +740,6 @@ func (module *WebAssemblyFileModule) ReadExportSection(size uint32) (*WebAssembl
 }
 
 type WebAssemblyCodeSection struct {
-    WebAssemblySection
 }
 
 func (section *WebAssemblyCodeSection) ConvertToWast() string {
@@ -1454,7 +1448,6 @@ func (module *WebAssemblyFileModule) ReadCodeSection(size uint32) (*WebAssemblyC
 }
 
 type WebAssemblyTableSection struct {
-    WebAssemblySection
 }
 
 func (section *WebAssemblyTableSection) ConvertToWast() string {
@@ -1546,7 +1539,6 @@ func (module *WebAssemblyFileModule) ReadTableSection(size uint32) (*WebAssembly
 }
 
 type WebAssemblyElementSection struct {
-    WebAssemblySection
 }
 
 func (section *WebAssemblyElementSection) ConvertToWast() string {
@@ -1605,7 +1597,10 @@ func (module *WebAssemblyFileModule) ReadElementSection(size uint32) (*WebAssemb
 }
 
 type WebAssemblyCustomSection struct {
-    WebAssemblySection
+}
+
+func (section *WebAssemblyCustomSection) ConvertToWast() string {
+    return "(custom)"
 }
 
 func (section *WebAssemblyCustomSection) String() string {
@@ -1644,7 +1639,10 @@ func (module *WebAssemblyFileModule) ReadCustomSection(size uint32) (*WebAssembl
 }
 
 type WebAssemblyMemorySection struct {
-    WebAssemblySection
+}
+
+func (section *WebAssemblyMemorySection) ConvertToWast() string {
+    return "(memory)"
 }
 
 func (section *WebAssemblyMemorySection) String() string {
@@ -1675,7 +1673,10 @@ func (module *WebAssemblyFileModule) ReadMemorySection(size uint32) (*WebAssembl
 }
 
 type WebAssemblyGlobalSection struct {
-    WebAssemblySection
+}
+
+func (section *WebAssemblyGlobalSection) ConvertToWast() string {
+    return "(global)"
 }
 
 func (section *WebAssemblyGlobalSection) String() string {
@@ -1710,7 +1711,10 @@ func (module *WebAssemblyFileModule) ReadGlobalSection(size uint32) (*WebAssembl
 }
 
 type WebAssemblyDataSection struct {
-    WebAssemblySection
+}
+
+func (section *WebAssemblyDataSection) ConvertToWast() string {
+    return "(data)"
 }
 
 func (section *WebAssemblyDataSection) String() string {
@@ -1755,6 +1759,32 @@ func (module *WebAssemblyFileModule) ReadDataSection(size uint32) (*WebAssemblyD
     return nil, nil
 }
 
+type WebAssemblyStartSection struct {
+    Start FunctionIndex
+}
+
+func (module *WebAssemblyFileModule) ReadStartSection(size uint32) (*WebAssemblyStartSection, error) {
+    log.Printf("Read start section size %v\n", size)
+    sectionReader := NewByteReader(io.LimitReader(module.reader, int64(size)))
+
+    startIndex, err := ReadFunctionIndex(sectionReader)
+    if err != nil {
+        return nil, fmt.Errorf("Could not read start function index: %v", err)
+    }
+
+    return &WebAssemblyStartSection{
+        Start: *startIndex,
+    }, nil
+}
+
+func (section *WebAssemblyStartSection) String() string {
+    return "start section"
+}
+
+func (section *WebAssemblyStartSection) ConvertToWast() string {
+    return fmt.Sprintf("(start %v)", section.Start.Id)
+}
+
 const (
     CustomSection byte = 0
     TypeSection byte = 1
@@ -1795,7 +1825,7 @@ func (module *WebAssemblyFileModule) ReadSection() (WebAssemblySection, error) {
         case MemorySection: return module.ReadMemorySection(sectionSize)
         case GlobalSection: return module.ReadGlobalSection(sectionSize)
         case ExportSection: return module.ReadExportSection(sectionSize)
-        case StartSection: return nil, fmt.Errorf("Unimplemented section %v: start section", sectionId)
+        case StartSection: return module.ReadStartSection(sectionSize)
         case ElementSection: return module.ReadElementSection(sectionSize)
         case CodeSection: return module.ReadCodeSection(sectionSize)
         case DataSection: return module.ReadDataSection(sectionSize)
