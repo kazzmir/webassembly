@@ -790,10 +790,21 @@ func (section *WebAssemblyExportSection) ConvertToWast(module *WebAssemblyModule
     for i, item := range section.Items {
         out.WriteString(indents)
         out.WriteString(fmt.Sprintf("(export \"%v\" ", item.Name))
+
+        found := false
         func_, ok := item.Kind.(*FunctionIndex)
         if ok {
             out.WriteString(fmt.Sprintf("(func %v)", func_.Id))
-        } else {
+            found = true
+        }
+
+        table, ok := item.Kind.(*TableIndex)
+        if ok {
+            out.WriteString(fmt.Sprintf("(table %v)", table.Id))
+            found = true
+        }
+
+        if !found {
             out.WriteString(fmt.Sprintf("unhandled export index %+v", item.Kind))
         }
 
@@ -1695,7 +1706,17 @@ func (module *WebAssemblyFileModule) ReadCodeSection(size uint32) (*WebAssemblyC
     return &section, nil
 }
 
+type TableType struct {
+    Limit Limit
+    RefType byte
+}
+
 type WebAssemblyTableSection struct {
+    Items []TableType
+}
+
+func (section *WebAssemblyTableSection) AddTable(limit Limit, refType byte){
+    section.Items = append(section.Items, TableType{Limit: limit, RefType: refType})
 }
 
 func (section *WebAssemblyTableSection) ToInterface() WebAssemblySection {
@@ -1706,7 +1727,31 @@ func (section *WebAssemblyTableSection) ToInterface() WebAssemblySection {
 }
 
 func (section *WebAssemblyTableSection) ConvertToWast(module *WebAssemblyModule, indents string) string {
-    return "(table)"
+    var out strings.Builder
+
+    for i, item := range section.Items {
+        out.WriteString(indents)
+        out.WriteString(fmt.Sprintf("(table (;%v;) ", i))
+        if item.Limit.HasMaximum {
+            out.WriteString(fmt.Sprintf("%v %v ", item.Limit.Minimum, item.Limit.Maximum))
+        } else {
+            out.WriteString(fmt.Sprintf("%v ", item.Limit.Minimum))
+        }
+
+        switch item.RefType {
+            case RefTypeFunction:
+                out.WriteString("funcref")
+            case RefTypeExtern:
+                out.WriteString("externref")
+        }
+
+        out.WriteByte(')')
+        if i < len(section.Items) - 1 {
+            out.WriteByte('\n')
+        }
+    }
+
+    return out.String()
 }
 
 func (section *WebAssemblyTableSection) String() string {
@@ -1755,7 +1800,8 @@ func ReadLimit(reader *ByteReader) (Limit, error) {
     return Limit{}, fmt.Errorf("Unknown limit type 0x%x", kind)
 }
 
-const TableElementMagic = 0x70
+const RefTypeFunction = 0x70
+const RefTypeExtern = 0x69
 
 func (module *WebAssemblyFileModule) ReadTableSection(size uint32) (*WebAssemblyTableSection, error) {
     log.Printf("Read table section size %v\n", size)
@@ -1770,13 +1816,13 @@ func (module *WebAssemblyFileModule) ReadTableSection(size uint32) (*WebAssembly
 
     var i uint32
     for i = 0; i < tables; i++ {
-        magic, err := sectionReader.ReadByte()
+        refType, err := sectionReader.ReadByte()
         if err != nil {
             return nil, fmt.Errorf("Could not read table entry %v: %v", i, err)
         }
 
-        if magic != TableElementMagic {
-            return nil, fmt.Errorf("Expected to read table magic 0x%x but got 0x%x for entry %v", TableElementMagic, magic, i)
+        if refType != RefTypeFunction && refType != RefTypeExtern {
+            return nil, fmt.Errorf("Unexpected table ref type %v", refType)
         }
 
         limit, err := ReadLimit(sectionReader)
@@ -1784,7 +1830,9 @@ func (module *WebAssemblyFileModule) ReadTableSection(size uint32) (*WebAssembly
             return nil, fmt.Errorf("Could not read limit for table entry %v: %v", i, err)
         }
 
-        log.Printf("Table entry %v: limit=%v\n", i, limit)
+        log.Printf("Table entry %v: limit=%v refType=%v\n", i, limit, refType)
+
+        section.AddTable(limit, refType)
     }
 
     _, err = sectionReader.ReadByte()
@@ -1807,7 +1855,7 @@ func (section *WebAssemblyElementSection) ToInterface() WebAssemblySection {
 }
 
 func (section *WebAssemblyElementSection) ConvertToWast(module *WebAssemblyModule, indents string) string {
-    return "(element)"
+    return indents + "(element)"
 }
 
 func (section *WebAssemblyElementSection) String() string {
