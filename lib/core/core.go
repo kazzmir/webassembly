@@ -415,7 +415,7 @@ type WebAssemblyImportSection struct {
 func (section *WebAssemblyImportSection) CountFunctions() int {
     count := 0
     for _, item := range section.Items {
-        _, ok := item.Kind.(*FunctionIndex)
+        _, ok := item.Kind.(*FunctionImport)
         if ok {
             count += 1
         }
