@@ -9,7 +9,6 @@ import (
     "strings"
     "bytes"
     "errors"
-    "reflect"
     "unicode/utf8"
     "encoding/binary"
     // "encoding/hex"
@@ -413,6 +412,18 @@ type WebAssemblyImportSection struct {
     Items []ImportSectionItem
 }
 
+func (section *WebAssemblyImportSection) CountFunctions() int {
+    count := 0
+    for _, item := range section.Items {
+        _, ok := item.Kind.(*FunctionIndex)
+        if ok {
+            count += 1
+        }
+    }
+
+    return count
+}
+
 func (section *WebAssemblyImportSection) ToInterface() WebAssemblySection {
     if section == nil {
         return nil
@@ -671,7 +682,7 @@ func ReadImportDescription(reader *ByteReader) (Index, error) {
         case byte(FunctionImportDescription): return ReadFunctionImport(reader)
         case byte(TableImportDescription): return ReadTableIndex(reader)
         case byte(MemoryImportDescription): return ReadMemoryIndex(reader)
-        case byte(GlobalImportDescription): return ReadGlobalIndex(reader)
+        case byte(GlobalImportDescription): return ReadGlobalType(reader)
     }
 
     return nil, fmt.Errorf("Unknown import description '%v'", kind)
@@ -862,6 +873,10 @@ func ReadMemoryIndex(reader *ByteReader) (*MemoryIndex, error) {
 type GlobalIndex struct {
     Index
     Id uint32
+}
+
+func (global *GlobalIndex) String() string {
+    return fmt.Sprintf("global %v", global.Id)
 }
 
 func ReadGlobalIndex(reader *ByteReader) (*GlobalIndex, error) {
@@ -2259,16 +2274,6 @@ const (
     DataSection byte = 11
 )
 
-func cleanup[T WebAssemblySection](a T, err error) (WebAssemblySection, error) {
-    if err != nil {
-        return nil, err
-    }
-    if reflect.ValueOf(a).IsNil() {
-        return nil, nil
-    }
-    return a, err
-}
-
 func (module *WebAssemblyFileModule) ReadSection() (WebAssemblySection, error) {
     sectionId, err := module.ReadSectionId()
     if err != nil {
@@ -2359,7 +2364,7 @@ func (module *WebAssemblyModule) GetImportFunctionCount() int {
     for _, section := range module.Sections {
         import_, ok := section.(*WebAssemblyImportSection)
         if ok {
-            return len(import_.Items)
+            return import_.CountFunctions()
         }
     }
 
