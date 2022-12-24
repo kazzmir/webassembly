@@ -438,11 +438,20 @@ func (section *WebAssemblyImportSection) ConvertToWast(module *WebAssemblyModule
         out.WriteString(indents)
         out.WriteString("(import ")
 
-        func_, ok := item.Kind.(*FunctionImport)
-        if ok {
-            out.WriteString(fmt.Sprintf("\"%v\" \"%v\" (func (;%v;) (type %v))", item.ModuleName, item.Name, i, func_.Index))
-        } else {
-            out.WriteString(fmt.Sprintf("unhandled import type %+v", item.Kind))
+        switch item.Kind.(type) {
+            case *FunctionImport:
+                func_ := item.Kind.(*FunctionImport)
+                out.WriteString(fmt.Sprintf("\"%v\" \"%v\" (func (;%v;) (type %v))", item.ModuleName, item.Name, i, func_.Index))
+            case *GlobalType:
+                global := item.Kind.(*GlobalType)
+                out.WriteString(fmt.Sprintf("\"%v\" \"%v\" (global (;%v;) ", item.ModuleName, item.Name, i))
+                if global.Mutable {
+                    out.WriteString(fmt.Sprintf("(mut %v)", global.ValueType.ConvertToWast(indents)))
+                } else {
+                    out.WriteString(global.ValueType.ConvertToWast(indents))
+                }
+            default:
+                out.WriteString(fmt.Sprintf("unhandled import type %+v", item.Kind))
         }
 
         out.WriteByte(')')
@@ -620,11 +629,11 @@ func ReadGlobalType(reader *ByteReader) (*GlobalType, error) {
         return nil, fmt.Errorf("Global index mutable value was not 0 (const) or 1 (var), instead it was %v", mutable)
     }
 
-    isConst := mutable == 0
+    isMutable := mutable == 1
 
     return &GlobalType{
         ValueType: value,
-        Mutable: isConst,
+        Mutable: isMutable,
     }, nil
 }
 
@@ -1047,6 +1056,29 @@ func (expr *I32ConstExpression) ConvertToWast(indents string) string {
     return fmt.Sprintf("i32.const %v", expr.N)
 }
 
+type I32AddExpression struct {
+}
+
+func (expr *I32AddExpression) ConvertToWast(indents string) string {
+    return "i32.add"
+}
+
+type GlobalGetExpression struct {
+    Global *GlobalIndex
+}
+
+func (expr *GlobalGetExpression) ConvertToWast(indents string) string {
+    return fmt.Sprintf("global.get %v", expr.Global.Id)
+}
+
+type GlobalSetExpression struct {
+    Global *GlobalIndex
+}
+
+func (expr *GlobalSetExpression) ConvertToWast(indents string) string {
+    return fmt.Sprintf("global.set %v", expr.Global.Id)
+}
+
 type BlockExpression struct {
     Expression
 }
@@ -1289,7 +1321,7 @@ func ReadExpressionSequence(reader *ByteReader, readingIf bool) ([]Expression, E
                     return nil, 0, fmt.Errorf("Could not read global index instruction %v: %v", count, err)
                 }
 
-                _ = global
+                sequence = append(sequence, &GlobalGetExpression{Global: global})
 
             /* global.set */
             case 0x24:
@@ -1298,7 +1330,7 @@ func ReadExpressionSequence(reader *ByteReader, readingIf bool) ([]Expression, E
                     return nil, 0, fmt.Errorf("Could not read global index instruction %v: %v", count, err)
                 }
 
-                _ = global
+                sequence = append(sequence, &GlobalSetExpression{Global: global})
 
             /* i32.load */
             case 0x28,
@@ -1484,11 +1516,14 @@ func ReadExpressionSequence(reader *ByteReader, readingIf bool) ([]Expression, E
                 /* i32.ctz */
                 0x68,
                 /* i32.popcnt */
-                0x69,
+                0x69:
+                    break
                 /* i32.add */
-                0x6a,
+            case 0x6a:
+                sequence = append(sequence, &I32AddExpression{})
+
                 /* i32.sub */
-                0x6b,
+            case 0x6b,
                 /* i32.mul */
                 0x6c,
                 /* i32.div_s */
