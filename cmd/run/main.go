@@ -406,7 +406,7 @@ func (module *WebAssemblyFileModule) ReadTypeSection(sectionSize uint32) (*WebAs
 type ImportSectionItem struct {
     ModuleName string
     Name string
-    Kind Import
+    Kind Index
 }
 
 type WebAssemblyImportSection struct {
@@ -447,7 +447,7 @@ func (section *WebAssemblyImportSection) String() string {
     return "import section"
 }
 
-func (section *WebAssemblyImportSection) AddImport(moduleName string, name string, kind Import) {
+func (section *WebAssemblyImportSection) AddImport(moduleName string, name string, kind Index) {
     section.Items = append(section.Items, ImportSectionItem{
         ModuleName: moduleName,
         Name: name,
@@ -544,17 +544,17 @@ func ReadTableIndex(reader *ByteReader) (*TableIndex, error) {
     }, nil
 }
 
-type GlobalIndex struct {
+type GlobalType struct {
     Index
     ValueType ValueType
     Mutable bool
 }
 
-func (global *GlobalIndex) String() string {
-    return fmt.Sprintf("global index value type=0x%x mutable=%v", global.ValueType, global.Mutable)
+func (global *GlobalType) String() string {
+    return fmt.Sprintf("global type value type=0x%x mutable=%v", global.ValueType, global.Mutable)
 }
 
-func ReadGlobalType(reader *ByteReader) (*GlobalIndex, error) {
+func ReadGlobalType(reader *ByteReader) (*GlobalType, error) {
     value, err := ReadValueType(reader)
     if err != nil {
         return nil, fmt.Errorf("Could not read value type for global index: %v", err)
@@ -571,17 +571,13 @@ func ReadGlobalType(reader *ByteReader) (*GlobalIndex, error) {
 
     isConst := mutable == 0
 
-    return &GlobalIndex{
+    return &GlobalType{
         ValueType: value,
         Mutable: isConst,
     }, nil
 }
 
 func ReadLocalIndex(reader *ByteReader) (uint32, error) {
-    return ReadU32(reader)
-}
-
-func ReadGlobalIndex(reader *ByteReader) (uint32, error) {
     return ReadU32(reader)
 }
 
@@ -603,6 +599,7 @@ func ReadMemoryType(reader *ByteReader) (*MemoryImportType, error) {
     return &MemoryImportType{Limit: limit}, nil
 }
 
+/* FIXME: not sure if this is needed */
 type Import interface {
     String() string
 }
@@ -624,7 +621,7 @@ func ReadFunctionImport(reader *ByteReader) (*FunctionImport, error) {
     return &FunctionImport{Index: index}, nil
 }
 
-func ReadImportDescription(reader *ByteReader) (Import, error) {
+func ReadImportDescription(reader *ByteReader) (Index, error) {
     kind, err := reader.ReadByte()
     if err != nil {
         return nil, err
@@ -633,8 +630,8 @@ func ReadImportDescription(reader *ByteReader) (Import, error) {
     switch kind {
         case byte(FunctionImportDescription): return ReadFunctionImport(reader)
         case byte(TableImportDescription): return ReadTableIndex(reader)
-        case byte(MemoryImportDescription): return ReadMemoryType(reader)
-        case byte(GlobalImportDescription): return ReadGlobalType(reader)
+        case byte(MemoryImportDescription): return ReadMemoryIndex(reader)
+        case byte(GlobalImportDescription): return ReadGlobalIndex(reader)
     }
 
     return nil, fmt.Errorf("Unknown import description '%v'", kind)
@@ -728,7 +725,20 @@ func (module *WebAssemblyFileModule) ReadFunctionSection(size uint32) (*WebAssem
     return &section, nil
 }
 
+type ExportSectionItem struct {
+    Name string
+    Kind Index
+}
+
 type WebAssemblyExportSection struct {
+    Items []ExportSectionItem
+}
+
+func (section *WebAssemblyExportSection) AddExport(name string, kind Index){
+    section.Items = append(section.Items, ExportSectionItem{
+        Name: name,
+        Kind: kind,
+    })
 }
 
 func (section *WebAssemblyExportSection) ToInterface() WebAssemblySection {
@@ -739,7 +749,25 @@ func (section *WebAssemblyExportSection) ToInterface() WebAssemblySection {
 }
 
 func (section *WebAssemblyExportSection) ConvertToWast(indents string) string {
-    return indents + "(export)"
+    var out strings.Builder
+
+    for i, item := range section.Items {
+        out.WriteString(indents)
+        out.WriteString(fmt.Sprintf("(export \"%v\" ", item.Name))
+        func_, ok := item.Kind.(*FunctionIndex)
+        if ok {
+            out.WriteString(fmt.Sprintf("(func %v)", func_.Id))
+        } else {
+            out.WriteString(fmt.Sprintf("unhandled export index %+v", item.Kind))
+        }
+
+        out.WriteByte(')')
+        if i < len(section.Items) - 1 {
+            out.WriteByte('\n')
+        }
+    }
+
+    return out.String()
 }
 
 func (section *WebAssemblyExportSection) String() string {
@@ -764,6 +792,20 @@ func ReadMemoryIndex(reader *ByteReader) (*MemoryIndex, error) {
     return &MemoryIndex{Id: index}, nil
 }
 
+type GlobalIndex struct {
+    Index
+    Id uint32
+}
+
+func ReadGlobalIndex(reader *ByteReader) (*GlobalIndex, error) {
+    index, err := ReadU32(reader)
+    if err != nil {
+        return nil, fmt.Errorf("Could not read global index: %v", err)
+    }
+
+    return &GlobalIndex{Id: index}, nil
+}
+
 type ExportDescription byte
 const (
     InvalidExportDescription ExportDescription = 0xff
@@ -783,7 +825,7 @@ func ReadExportDescription(reader *ByteReader) (Index, error) {
         case byte(FunctionExportDescription): return ReadFunctionIndex(reader)
         case byte(TableExportDescription): return ReadTableIndex(reader)
         case byte(MemoryExportDescription): return ReadMemoryIndex(reader)
-        case byte(GlobalExportDescription): return nil, fmt.Errorf("Unimplemented export description %v", GlobalExportDescription)
+        case byte(GlobalExportDescription): return ReadGlobalIndex(reader)
     }
 
     return nil, fmt.Errorf("Unknown import description '%v'", kind)
@@ -814,6 +856,8 @@ func (module *WebAssemblyFileModule) ReadExportSection(size uint32) (*WebAssembl
         }
 
         log.Printf("Export %v: name='%v' description=%v\n", i, name, description)
+
+        section.AddExport(name, description)
     }
 
     _, err = sectionReader.ReadByte()
