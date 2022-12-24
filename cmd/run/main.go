@@ -1063,6 +1063,13 @@ func (expr *I32AddExpression) ConvertToWast(indents string) string {
     return "i32.add"
 }
 
+type I32DivSignedExpression struct {
+}
+
+func (expr *I32DivSignedExpression) ConvertToWast(indents string) string {
+    return "i32.div_s"
+}
+
 type GlobalGetExpression struct {
     Global *GlobalIndex
 }
@@ -1525,11 +1532,14 @@ func ReadExpressionSequence(reader *ByteReader, readingIf bool) ([]Expression, E
                 /* i32.sub */
             case 0x6b,
                 /* i32.mul */
-                0x6c,
+                0x6c:
+                    break
                 /* i32.div_s */
-                0x6d,
+            case 0x6d:
+                sequence = append(sequence, &I32DivSignedExpression{})
+
                 /* i32.div_u */
-                0x6e,
+            case 0x6e,
                 /* i32.rem_s */
                 0x6f,
                 /* i32.rem_u */
@@ -2155,7 +2165,17 @@ func (module *WebAssemblyFileModule) ReadMemorySection(size uint32) (*WebAssembl
     return &section, nil
 }
 
+type Global struct {
+    Global *GlobalType
+    Expression []Expression
+}
+
 type WebAssemblyGlobalSection struct {
+    Globals []Global
+}
+
+func (section *WebAssemblyGlobalSection) AddGlobal(global *GlobalType, expression []Expression){
+    section.Globals = append(section.Globals, Global{Global: global, Expression: expression})
 }
 
 func (section *WebAssemblyGlobalSection) ToInterface() WebAssemblySection {
@@ -2166,7 +2186,18 @@ func (section *WebAssemblyGlobalSection) ToInterface() WebAssemblySection {
 }
 
 func (section *WebAssemblyGlobalSection) ConvertToWast(module *WebAssemblyModule, indents string) string {
-    return "(global)"
+    var out strings.Builder
+    for i, global := range section.Globals {
+        out.WriteString(indents)
+        out.WriteString("(global")
+        _ = global
+        out.WriteByte(')')
+        if i < len(section.Globals) - 1 {
+            out.WriteByte('\n')
+        }
+    }
+
+    return out.String()
 }
 
 func (section *WebAssemblyGlobalSection) String() string {
@@ -2197,6 +2228,8 @@ func (module *WebAssemblyFileModule) ReadGlobalSection(size uint32) (*WebAssembl
         }
 
         log.Printf("Global element %v: global=%v expressions=%v\n", i, global, expressions)
+
+        section.AddGlobal(global, expressions)
     }
 
     return &section, nil
@@ -2423,7 +2456,7 @@ func (module *WebAssemblyModule) ConvertToWast(indents string) string {
     return out.String()
 }
 
-func parse(path string) (WebAssemblyModule, error) {
+func Parse(path string) (WebAssemblyModule, error) {
     module, err := WebAssemblyNew(path)
     if err != nil {
         return WebAssemblyModule{}, err
@@ -2469,7 +2502,7 @@ func main(){
     log.Printf("Web assembly runner\n")
 
     if len(os.Args) > 1 {
-        module, err := parse(os.Args[1])
+        module, err := Parse(os.Args[1])
         if err != nil {
             log.Printf("Error: %v\n", err)
         } else {
