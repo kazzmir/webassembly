@@ -1,0 +1,3 @@
+Put a .wasm file in here, then use wabt/bin/wasm2wat to convert it to a .wat file
+
+$ ../wabt/bin/wasm2wat table.wasm > table.wat
