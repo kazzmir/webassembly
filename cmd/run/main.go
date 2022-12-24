@@ -524,6 +524,26 @@ func ReadFunctionIndex(reader *ByteReader) (*FunctionIndex, error) {
     }, nil
 }
 
+func ReadFunctionIndexVector(reader *ByteReader) ([]*FunctionIndex, error) {
+    var out []*FunctionIndex
+    length, err := ReadU32(reader)
+    if err != nil {
+        return nil, fmt.Errorf("Could not read function index vector: %v", err)
+    }
+
+    var j uint32
+    for j = 0; j < length; j++ {
+        functionIndex, err := ReadFunctionIndex(reader)
+        if err != nil {
+            return nil, fmt.Errorf("Could not read function index %v: %v", j, err)
+        }
+
+        out = append(out, functionIndex)
+    }
+
+    return out, nil
+}
+
 type TypeIndex struct {
     Index
     Id uint32
@@ -994,6 +1014,14 @@ type CallExpression struct {
 
 func (call *CallExpression) ConvertToWast(indents string) string {
     return fmt.Sprintf("call %v", call.Index.Id)
+}
+
+type RefFuncExpression struct {
+    Function *FunctionIndex
+}
+
+func (expr *RefFuncExpression) ConvertToWast(indents string) string {
+    return fmt.Sprintf("ref.func %v", expr.Function.Id)
 }
 
 type I32ConstExpression struct {
@@ -1843,7 +1871,22 @@ func (module *WebAssemblyFileModule) ReadTableSection(size uint32) (*WebAssembly
     return &section, nil
 }
 
+type ElementInit struct {
+    Type byte
+    Inits []Expression
+    Mode ElementMode
+}
+
+type ElementMode interface {
+}
+
+type ElementModeActive struct {
+    Table int
+    Offset []Expression
+}
+
 type WebAssemblyElementSection struct {
+    Elements []ElementInit
 }
 
 func (section *WebAssemblyElementSection) ToInterface() WebAssemblySection {
@@ -1854,8 +1897,60 @@ func (section *WebAssemblyElementSection) ToInterface() WebAssemblySection {
     return section
 }
 
+func (section *WebAssemblyElementSection) AddFunctionRefInit(functions []*FunctionIndex, expression []Expression){
+    var inits []Expression
+    for _, function := range functions {
+        inits = append(inits, &RefFuncExpression{
+            Function: function,
+        })
+    }
+    section.Elements = append(section.Elements, ElementInit{
+        Type: RefTypeFunction,
+        Inits: inits,
+        Mode: &ElementModeActive{
+            Table: 0,
+            Offset: expression,
+        },
+    })
+}
+
 func (section *WebAssemblyElementSection) ConvertToWast(module *WebAssemblyModule, indents string) string {
-    return indents + "(element)"
+    var out strings.Builder
+    for i, element := range section.Elements {
+        out.WriteString(indents)
+        out.WriteString(fmt.Sprintf("(elem (;%v;) ", i))
+
+        active, isActive := element.Mode.(*ElementModeActive)
+        if isActive {
+            out.WriteString("(")
+            for _, expr := range active.Offset {
+                out.WriteString(expr.ConvertToWast(indents))
+            }
+            out.WriteString(") ")
+        }
+
+        switch element.Type {
+            case RefTypeFunction:
+                out.WriteString("func ")
+        }
+
+        for i, init := range element.Inits {
+            // out.WriteString(init.Function.Id)
+            refFunc, ok := init.(*RefFuncExpression)
+            if ok {
+                out.WriteString(fmt.Sprintf("%v", refFunc.Function.Id))
+            }
+            if i < len(element.Inits) - 1 {
+                out.WriteString(" ")
+            }
+        }
+
+        out.WriteByte(')')
+        if i < len(section.Elements) {
+            out.WriteByte('\n')
+        }
+    }
+    return out.String()
 }
 
 func (section *WebAssemblyElementSection) String() string {
@@ -1880,27 +1975,32 @@ func (module *WebAssemblyFileModule) ReadElementSection(size uint32) (*WebAssemb
             return nil, fmt.Errorf("Could not read type index for element %v: %v", i, err)
         }
 
-        expressions, _, err := ReadExpressionSequence(sectionReader, false)
-        if err != nil {
-            return nil, fmt.Errorf("Could not read expressions for element %v: %v", i, err)
+        switch index {
+            /* 0:u32 e:expr y*:vec(funcidx) ->
+             * {type funcref, init ((ref.func y) end)*, mode active {table 0, offset e}}
+             */
+            case 0:
+                expressions, _, err := ReadExpressionSequence(sectionReader, false)
+                if err != nil {
+                    return nil, fmt.Errorf("Could not read expressions for element %v: %v", i, err)
+                }
+
+                functions, err := ReadFunctionIndexVector(sectionReader)
+                if err != nil {
+                    return nil, fmt.Errorf("Could not read function index vector for element %v: %v", i, err)
+                }
+
+                log.Printf("Element %v: index=%v expressions=%v\n", i, index, expressions)
+
+                section.AddFunctionRefInit(functions, expressions)
+            case 1:
+            case 2:
+            case 3:
+            case 4:
+            case 5:
+            case 6:
+            case 7:
         }
-
-        initFunctions, err := ReadU32(sectionReader)
-        if err != nil {
-            return nil, fmt.Errorf("Could not read init functions for element %v: %v", i, err)
-        }
-
-        var j uint32
-        for j = 0; j < initFunctions; j++ {
-            functionIndex, err := ReadU32(sectionReader)
-            if err != nil {
-                return nil, fmt.Errorf("Could not read function index for element %v[%v]: %v", i, j, err)
-            }
-
-            _ = functionIndex
-        }
-
-        log.Printf("Element %v: index=%v expressions=%v\n", i, index, expressions)
     }
 
     _, err = sectionReader.ReadByte()
