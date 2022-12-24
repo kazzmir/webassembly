@@ -80,7 +80,7 @@ func (module *WebAssemblyFileModule) ReadSectionId() (byte, error) {
 
 type WebAssemblySection interface {
     String() string
-    ConvertToWast(indents string) string
+    ConvertToWast(module *WebAssemblyModule, indents string) string
     ToInterface() WebAssemblySection
 }
 
@@ -99,7 +99,7 @@ func (section *WebAssemblyTypeSection) AddFunctionType(function WebAssemblyFunct
     section.Functions = append(section.Functions, function)
 }
 
-func (section *WebAssemblyTypeSection) ConvertToWast(indents string) string {
+func (section *WebAssemblyTypeSection) ConvertToWast(module *WebAssemblyModule, indents string) string {
     var out strings.Builder
     for i, function := range section.Functions {
         out.WriteString(indents)
@@ -128,7 +128,7 @@ func (section *WebAssemblyTypeSection) ConvertToWast(indents string) string {
         out.WriteByte(')') // for func
         out.WriteByte(')') // for type
         if i < len(section.Functions) {
-            out.WriteByte(')')
+            out.WriteByte('\n')
         }
     }
     return out.String()
@@ -421,7 +421,7 @@ func (section *WebAssemblyImportSection) ToInterface() WebAssemblySection {
     return section
 }
 
-func (section *WebAssemblyImportSection) ConvertToWast(indents string) string {
+func (section *WebAssemblyImportSection) ConvertToWast(module *WebAssemblyModule, indents string) string {
     var out strings.Builder
     for i, item := range section.Items {
         out.WriteString(indents)
@@ -520,6 +520,26 @@ func ReadFunctionIndex(reader *ByteReader) (*FunctionIndex, error) {
     }
 
     return &FunctionIndex{
+        Id: index,
+    }, nil
+}
+
+type TypeIndex struct {
+    Index
+    Id uint32
+}
+
+func (index *TypeIndex) String() string {
+    return fmt.Sprintf("(type %v)", index.Id)
+}
+
+func ReadTypeIndex(reader *ByteReader) (*TypeIndex, error) {
+    index, err := ReadU32(reader)
+    if err != nil {
+        return nil, err
+    }
+
+    return &TypeIndex{
         Id: index,
     }, nil
 }
@@ -677,6 +697,19 @@ func (module *WebAssemblyFileModule) ReadImportSection(sectionSize uint32) (*Web
 }
 
 type WebAssemblyFunctionSection struct {
+    Functions []*TypeIndex
+}
+
+func (section *WebAssemblyFunctionSection) GetFunctionType(index int) *TypeIndex {
+    if index >= 0 && index < len(section.Functions) {
+        return section.Functions[index]
+    }
+
+    return nil
+}
+
+func (section *WebAssemblyFunctionSection) AddFunction(index *TypeIndex){
+    section.Functions = append(section.Functions, index)
 }
 
 func (section *WebAssemblyFunctionSection) ToInterface() WebAssemblySection {
@@ -686,8 +719,9 @@ func (section *WebAssemblyFunctionSection) ToInterface() WebAssemblySection {
     return section
 }
 
-func (section *WebAssemblyFunctionSection) ConvertToWast(indents string) string {
-    return indents + "(function)"
+func (section *WebAssemblyFunctionSection) ConvertToWast(module *WebAssemblyModule, indents string) string {
+    return ""
+    // return indents + "(function)"
 }
 
 func (section *WebAssemblyFunctionSection) String() string {
@@ -709,12 +743,14 @@ func (module *WebAssemblyFileModule) ReadFunctionSection(size uint32) (*WebAssem
 
     var i uint32
     for i = 0; i < types; i++ {
-        index, err := ReadU32(sectionReader)
+        index, err := ReadTypeIndex(sectionReader)
         if err != nil {
             return nil, err
         }
 
         log.Printf("Function %v has type index 0x%x\n", i, index)
+
+        section.AddFunction(index)
     }
 
     _, err = sectionReader.ReadByte()
@@ -748,7 +784,7 @@ func (section *WebAssemblyExportSection) ToInterface() WebAssemblySection {
     return section
 }
 
-func (section *WebAssemblyExportSection) ConvertToWast(indents string) string {
+func (section *WebAssemblyExportSection) ConvertToWast(module *WebAssemblyModule, indents string) string {
     var out strings.Builder
 
     for i, item := range section.Items {
@@ -869,6 +905,7 @@ func (module *WebAssemblyFileModule) ReadExportSection(size uint32) (*WebAssembl
 }
 
 type WebAssemblyCodeSection struct {
+    Code []Code
 }
 
 func (section *WebAssemblyCodeSection) ToInterface() WebAssemblySection {
@@ -879,21 +916,85 @@ func (section *WebAssemblyCodeSection) ToInterface() WebAssemblySection {
     return section
 }
 
-func (section *WebAssemblyCodeSection) ConvertToWast(indents string) string {
-    return indents + "(code)"
+func (section *WebAssemblyCodeSection) AddCode(code Code){
+    section.Code = append(section.Code, code)
+}
+
+func (section *WebAssemblyCodeSection) ConvertToWast(module *WebAssemblyModule, indents string) string {
+    var out strings.Builder
+    startIndex := module.GetImportFunctionCount()
+    for i, code := range section.Code {
+        out.WriteString(indents)
+        typeIndex := module.FindFunctionType(i)
+        if typeIndex == nil {
+            out.WriteString(fmt.Sprintf("unknown function type index for function %v", i))
+        } else {
+            out.WriteString(fmt.Sprintf("(func (;%v;) (type %v)\n", i+startIndex, typeIndex.Id))
+        }
+        out.WriteString(code.ConvertToWast(indents + "  "))
+        out.WriteString(")\n")
+    }
+    return out.String()
 }
 
 func (section *WebAssemblyCodeSection) String() string {
     return "code section"
 }
 
-type Code struct {
+type Local struct {
+    Count uint32
+    Type ValueType
 }
 
-type Expression struct {
+type Code struct {
+    Locals []Local
+    Expressions []Expression
+}
+
+func (code *Code) ConvertToWast(indents string) string {
+    var out strings.Builder
+
+    for i, expression := range code.Expressions {
+        out.WriteString(indents)
+        out.WriteString(expression.ConvertToWast(indents))
+        if i < len(code.Expressions) - 1 {
+            out.WriteByte('\n')
+        }
+    }
+
+    return out.String()
+}
+
+func (code *Code) AddLocal(count uint32, type_ ValueType){
+    code.Locals = append(code.Locals, Local{Count: count, Type: type_})
+}
+
+func (code *Code) SetExpressions(expressions []Expression){
+    code.Expressions = expressions
+}
+
+type Expression interface {
+    ConvertToWast(string) string
+}
+
+type CallExpression struct {
+    Index *FunctionIndex
+}
+
+func (call *CallExpression) ConvertToWast(indents string) string {
+    return fmt.Sprintf("call %v", call.Index.Id)
+}
+
+type I32ConstExpression struct {
+    N int32
+}
+
+func (expr *I32ConstExpression) ConvertToWast(indents string) string {
+    return fmt.Sprintf("i32.const %v", expr.N)
 }
 
 type BlockExpression struct {
+    Expression
 }
 
 type ExpressionSequenceEnd uint32
@@ -960,6 +1061,8 @@ func ReadMemoryArgument(reader *ByteReader) (MemoryArgument, error) {
  * be followed by an else sequence of instructions.
  */
 func ReadExpressionSequence(reader *ByteReader, readingIf bool) ([]Expression, ExpressionSequenceEnd, error) {
+
+    var sequence []Expression
 
     count := 0
     for {
@@ -1028,7 +1131,7 @@ func ReadExpressionSequence(reader *ByteReader, readingIf bool) ([]Expression, E
                     return nil, 0, fmt.Errorf("Could not read function index for call instruction %v: %v", count, err)
                 }
 
-                _ = index
+                sequence = append(sequence, &CallExpression{Index: index})
 
             /* call_indirect */
             case 0x11:
@@ -1042,7 +1145,7 @@ func ReadExpressionSequence(reader *ByteReader, readingIf bool) ([]Expression, E
             /* termination of a block / instruction sequence */
             case 0xb:
                 log.Printf("Read %v instructions\n", count+1)
-                return nil, SequenceEnd, nil
+                return sequence, SequenceEnd, nil
 
             /* br */
             case 0xc:
@@ -1197,7 +1300,7 @@ func ReadExpressionSequence(reader *ByteReader, readingIf bool) ([]Expression, E
 
                 _ = memory
 
-            /* memoery.size */
+            /* memory.size */
             case 0x3f,
                 /* memory.grow */
                 0x40:
@@ -1223,7 +1326,7 @@ func ReadExpressionSequence(reader *ByteReader, readingIf bool) ([]Expression, E
                     return nil, 0, fmt.Errorf("Unable to read i32 value at instruction %v: %v", count, err)
                 }
 
-                _ = i32
+                sequence = append(sequence, &I32ConstExpression{N: i32})
 
             /* i64.const n */
             case 0x42:
@@ -1519,11 +1622,13 @@ func ReadCode(reader *ByteReader) (Code, error) {
 
     log.Printf("Read code locals %v\n", locals)
 
+    var code Code
+
     var i uint32
     for i = 0; i < locals; i++ {
-        size, err := ReadU32(reader)
+        count, err := ReadU32(reader)
         if err != nil {
-            return Code{}, fmt.Errorf("Could not read local size for %v: %v", i, err)
+            return Code{}, fmt.Errorf("Could not read local count for %v: %v", i, err)
         }
 
         valueType, err := ReadValueType(reader)
@@ -1531,7 +1636,9 @@ func ReadCode(reader *ByteReader) (Code, error) {
             return Code{}, fmt.Errorf("Could not read type of local for %v: %v", i, err)
         }
 
-        log.Printf("Local %v; size=%v type=0x%x\n", i, size, valueType)
+        log.Printf("Local %v; count=%v type=0x%x\n", i, count, valueType)
+
+        code.AddLocal(count, valueType)
     }
 
     expressions, _, err := ReadExpressionSequence(reader, false)
@@ -1539,9 +1646,9 @@ func ReadCode(reader *ByteReader) (Code, error) {
         return Code{}, fmt.Errorf("Could not read expressions: %v", err)
     }
 
-    _ = expressions
+    code.SetExpressions(expressions)
 
-    return Code{}, nil
+    return code, nil
 }
 
 func (module *WebAssemblyFileModule) ReadCodeSection(size uint32) (*WebAssemblyCodeSection, error) {
@@ -1576,6 +1683,8 @@ func (module *WebAssemblyFileModule) ReadCodeSection(size uint32) (*WebAssemblyC
         }
 
         log.Printf("Code %v: size=%v code=%v\n", i, size, code)
+
+        section.AddCode(code)
     }
 
     _, err = sectionReader.ReadByte()
@@ -1596,7 +1705,7 @@ func (section *WebAssemblyTableSection) ToInterface() WebAssemblySection {
     return section
 }
 
-func (section *WebAssemblyTableSection) ConvertToWast(indents string) string {
+func (section *WebAssemblyTableSection) ConvertToWast(module *WebAssemblyModule, indents string) string {
     return "(table)"
 }
 
@@ -1697,7 +1806,7 @@ func (section *WebAssemblyElementSection) ToInterface() WebAssemblySection {
     return section
 }
 
-func (section *WebAssemblyElementSection) ConvertToWast(indents string) string {
+func (section *WebAssemblyElementSection) ConvertToWast(module *WebAssemblyModule, indents string) string {
     return "(element)"
 }
 
@@ -1764,7 +1873,7 @@ func (section *WebAssemblyCustomSection) ToInterface() WebAssemblySection {
     return section
 }
 
-func (section *WebAssemblyCustomSection) ConvertToWast(indents string) string {
+func (section *WebAssemblyCustomSection) ConvertToWast(module *WebAssemblyModule, indents string) string {
     return "(custom)"
 }
 
@@ -1815,7 +1924,7 @@ func (section *WebAssemblyMemorySection) ToInterface() WebAssemblySection {
     return section
 }
 
-func (section *WebAssemblyMemorySection) ConvertToWast(indents string) string {
+func (section *WebAssemblyMemorySection) ConvertToWast(module *WebAssemblyModule, indents string) string {
     return "(memory)"
 }
 
@@ -1858,7 +1967,7 @@ func (section *WebAssemblyGlobalSection) ToInterface() WebAssemblySection {
     return section
 }
 
-func (section *WebAssemblyGlobalSection) ConvertToWast(indents string) string {
+func (section *WebAssemblyGlobalSection) ConvertToWast(module *WebAssemblyModule, indents string) string {
     return "(global)"
 }
 
@@ -1906,7 +2015,7 @@ func (section *WebAssemblyDataSection) ToInterface() WebAssemblySection {
     return section
 }
 
-func (section *WebAssemblyDataSection) ConvertToWast(indents string) string {
+func (section *WebAssemblyDataSection) ConvertToWast(module *WebAssemblyModule, indents string) string {
     return "(data)"
 }
 
@@ -1983,7 +2092,7 @@ func (section *WebAssemblyStartSection) String() string {
     return "start section"
 }
 
-func (section *WebAssemblyStartSection) ConvertToWast(indents string) string {
+func (section *WebAssemblyStartSection) ConvertToWast(module *WebAssemblyModule, indents string) string {
     return fmt.Sprintf("(start %v)", section.Start.Id)
 }
 
@@ -2087,6 +2196,28 @@ type WebAssemblyModule struct {
     Sections []WebAssemblySection
 }
 
+func (module *WebAssemblyModule) FindFunctionType(index int) *TypeIndex {
+    for _, section := range module.Sections {
+        function, ok := section.(*WebAssemblyFunctionSection)
+        if ok {
+            return function.GetFunctionType(index)
+        }
+    }
+
+    return nil
+}
+
+func (module *WebAssemblyModule) GetImportFunctionCount() int {
+    for _, section := range module.Sections {
+        import_, ok := section.(*WebAssemblyImportSection)
+        if ok {
+            return len(import_.Items)
+        }
+    }
+
+    return 0
+}
+
 func (module *WebAssemblyModule) AddSection(section WebAssemblySection) {
     module.Sections = append(module.Sections, section)
 }
@@ -2096,7 +2227,7 @@ func (module *WebAssemblyModule) ConvertToWast(indents string) string {
 
     out.WriteString("(module\n")
     for _, section := range module.Sections {
-        out.WriteString(section.ConvertToWast("  "))
+        out.WriteString(section.ConvertToWast(module, "  "))
         out.WriteString("\n")
     }
     out.WriteString(")")
