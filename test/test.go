@@ -233,6 +233,8 @@ func checkAllTestFiles(){
             err := compare(wasm, expectedWat)
             if err != nil {
                 fmt.Printf("Failure: %v vs %v: %v\n", wasm, expectedWat, err)
+            } else {
+                fmt.Printf("Success: %v\n", name)
             }
         }
     }

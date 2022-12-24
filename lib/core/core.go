@@ -320,7 +320,7 @@ func (module *WebAssemblyFileModule) ReadFunctionType(reader io.Reader) (WebAsse
     }
 
     if magic != FunctionTypeMagic {
-        return WebAssemblyFunction{}, fmt.Errorf("Expected to read function type 0x%x but got 0x%x\n", magic, FunctionTypeMagic)
+        return WebAssemblyFunction{}, fmt.Errorf("Expected to read function type 0x%x but got 0x%x", magic, FunctionTypeMagic)
     }
 
     inputTypes, err := ReadTypeVector(buffer)
