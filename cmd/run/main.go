@@ -9,6 +9,7 @@ import (
     "strings"
     "bytes"
     "errors"
+    "reflect"
     "unicode/utf8"
     "encoding/binary"
     // "encoding/hex"
@@ -79,35 +80,57 @@ func (module *WebAssemblyFileModule) ReadSectionId() (byte, error) {
 
 type WebAssemblySection interface {
     String() string
-    ConvertToWast() string
+    ConvertToWast(indents string) string
+    ToInterface() WebAssemblySection
 }
 
 type WebAssemblyTypeSection struct {
     Functions []WebAssemblyFunction
 }
 
+func (section *WebAssemblyTypeSection) ToInterface() WebAssemblySection {
+    if section == nil {
+        return nil
+    }
+    return section
+}
+
 func (section *WebAssemblyTypeSection) AddFunctionType(function WebAssemblyFunction) {
     section.Functions = append(section.Functions, function)
 }
 
-func (section *WebAssemblyTypeSection) ConvertToWast() string {
+func (section *WebAssemblyTypeSection) ConvertToWast(indents string) string {
     var out strings.Builder
-    out.WriteString("(type ")
-    for _, function := range section.Functions {
-        out.WriteString("(func ")
-        for _, input := range function.InputTypes {
-            out.WriteString(input.ConvertToWast())
-            out.WriteByte(' ')
+    for i, function := range section.Functions {
+        out.WriteString(indents)
+        out.WriteString("(type ")
+        out.WriteString(fmt.Sprintf("(;%v;)", i))
+        out.WriteString(" (func")
+
+        if len(function.InputTypes) > 0 {
+            out.WriteString(" (param")
+            for _, input := range function.InputTypes {
+                out.WriteByte(' ')
+                out.WriteString(input.ConvertToWast(""))
+            }
+            out.WriteByte(')')
         }
-        out.WriteString("(result ")
-        for _, output := range function.OutputTypes {
-            out.WriteString(output.ConvertToWast())
-            out.WriteByte(' ')
+
+        if len(function.OutputTypes) > 0 {
+            out.WriteString(" (result")
+            for _, output := range function.OutputTypes {
+                out.WriteByte(' ')
+                out.WriteString(output.ConvertToWast(""))
+            }
+            out.WriteString(")")
         }
-        out.WriteString(")")
-        out.WriteString(")")
+
+        out.WriteByte(')') // for func
+        out.WriteByte(')') // for type
+        if i < len(section.Functions) {
+            out.WriteByte(')')
+        }
     }
-    out.WriteString(")")
     return out.String()
 }
 
@@ -227,7 +250,7 @@ const (
     ValueTypeF64 ValueType = 0x7c
 )
 
-func (value *ValueType) ConvertToWast() string {
+func (value *ValueType) ConvertToWast(indents string) string {
     switch *value {
         case InvalidValueType: return "invalid"
         case ValueTypeI32: return "i32"
@@ -380,15 +403,56 @@ func (module *WebAssemblyFileModule) ReadTypeSection(sectionSize uint32) (*WebAs
     return &section, nil
 }
 
-type WebAssemblyImportSection struct {
+type ImportSectionItem struct {
+    ModuleName string
+    Name string
+    Kind Import
 }
 
-func (section *WebAssemblyImportSection) ConvertToWast() string {
-    return "(import)"
+type WebAssemblyImportSection struct {
+    Items []ImportSectionItem
+}
+
+func (section *WebAssemblyImportSection) ToInterface() WebAssemblySection {
+    if section == nil {
+        return nil
+    }
+
+    return section
+}
+
+func (section *WebAssemblyImportSection) ConvertToWast(indents string) string {
+    var out strings.Builder
+    for i, item := range section.Items {
+        out.WriteString(indents)
+        out.WriteString("(import ")
+
+        func_, ok := item.Kind.(*FunctionImport)
+        if ok {
+            out.WriteString(fmt.Sprintf("\"%v\" \"%v\" (func (;%v;) (type %v))", item.ModuleName, item.Name, i, func_.Index))
+        } else {
+            out.WriteString(fmt.Sprintf("unhandled import type %+v", item.Kind))
+        }
+
+        out.WriteByte(')')
+        if i < len(section.Items) - 1 {
+            out.WriteByte('\n')
+        }
+    }
+
+    return out.String()
 }
 
 func (section *WebAssemblyImportSection) String() string {
     return "import section"
+}
+
+func (section *WebAssemblyImportSection) AddImport(moduleName string, name string, kind Import) {
+    section.Items = append(section.Items, ImportSectionItem{
+        ModuleName: moduleName,
+        Name: name,
+        Kind: kind,
+    })
 }
 
 func ReadName(reader *ByteReader) (string, error) {
@@ -588,6 +652,8 @@ func (module *WebAssemblyFileModule) ReadImportSection(sectionSize uint32) (*Web
 
     log.Printf("Have %v imports\n", imports)
 
+    var section WebAssemblyImportSection
+
     var i uint32
     for i = 0; i < imports; i++ {
         moduleName, err := ReadName(sectionReader)
@@ -606,16 +672,25 @@ func (module *WebAssemblyFileModule) ReadImportSection(sectionSize uint32) (*Web
         }
 
         log.Printf("Import %v: module='%v' name='%v' kind='%v'\n", i, moduleName, name, kind.String())
+
+        section.AddImport(moduleName, name, kind)
     }
 
-    return nil, nil
+    return &section, nil
 }
 
 type WebAssemblyFunctionSection struct {
 }
 
-func (section *WebAssemblyFunctionSection) ConvertToWast() string {
-    return "(function)"
+func (section *WebAssemblyFunctionSection) ToInterface() WebAssemblySection {
+    if section == nil {
+        return nil
+    }
+    return section
+}
+
+func (section *WebAssemblyFunctionSection) ConvertToWast(indents string) string {
+    return indents + "(function)"
 }
 
 func (section *WebAssemblyFunctionSection) String() string {
@@ -630,6 +705,8 @@ func (module *WebAssemblyFileModule) ReadFunctionSection(size uint32) (*WebAssem
     if err != nil {
         return nil, err
     }
+
+    var section WebAssemblyFunctionSection
 
     log.Printf("Functions %v\n", types)
 
@@ -648,15 +725,21 @@ func (module *WebAssemblyFileModule) ReadFunctionSection(size uint32) (*WebAssem
         return nil, fmt.Errorf("Error reading function section: not all bytes were read")
     }
 
-
-    return nil, nil
+    return &section, nil
 }
 
 type WebAssemblyExportSection struct {
 }
 
-func (section *WebAssemblyExportSection) ConvertToWast() string {
-    return "(export)"
+func (section *WebAssemblyExportSection) ToInterface() WebAssemblySection {
+    if section == nil {
+        return nil
+    }
+    return section
+}
+
+func (section *WebAssemblyExportSection) ConvertToWast(indents string) string {
+    return indents + "(export)"
 }
 
 func (section *WebAssemblyExportSection) String() string {
@@ -716,6 +799,8 @@ func (module *WebAssemblyFileModule) ReadExportSection(size uint32) (*WebAssembl
         return nil, err
     }
 
+    var section WebAssemblyExportSection
+
     var i uint32
     for i = 0; i < exports; i++ {
         name, err := ReadName(sectionReader)
@@ -736,14 +821,22 @@ func (module *WebAssemblyFileModule) ReadExportSection(size uint32) (*WebAssembl
         return nil, fmt.Errorf("Error reading export section: not all bytes were read")
     }
 
-    return nil, nil
+    return &section, nil
 }
 
 type WebAssemblyCodeSection struct {
 }
 
-func (section *WebAssemblyCodeSection) ConvertToWast() string {
-    return "(code)"
+func (section *WebAssemblyCodeSection) ToInterface() WebAssemblySection {
+    if section == nil {
+        return nil
+    }
+
+    return section
+}
+
+func (section *WebAssemblyCodeSection) ConvertToWast(indents string) string {
+    return indents + "(code)"
 }
 
 func (section *WebAssemblyCodeSection) String() string {
@@ -1416,6 +1509,8 @@ func (module *WebAssemblyFileModule) ReadCodeSection(size uint32) (*WebAssemblyC
         return nil, fmt.Errorf("Could not read code vector length from code section: %v", err)
     }
 
+    var section WebAssemblyCodeSection
+
     var i uint32
     for i = 0; i < codes; i++ {
         size, err := ReadU32(sectionReader)
@@ -1444,13 +1539,20 @@ func (module *WebAssemblyFileModule) ReadCodeSection(size uint32) (*WebAssemblyC
         return nil, fmt.Errorf("Error reading code section: not all bytes were read")
     }
 
-    return nil, nil
+    return &section, nil
 }
 
 type WebAssemblyTableSection struct {
 }
 
-func (section *WebAssemblyTableSection) ConvertToWast() string {
+func (section *WebAssemblyTableSection) ToInterface() WebAssemblySection {
+    if section == nil {
+        return nil
+    }
+    return section
+}
+
+func (section *WebAssemblyTableSection) ConvertToWast(indents string) string {
     return "(table)"
 }
 
@@ -1511,6 +1613,8 @@ func (module *WebAssemblyFileModule) ReadTableSection(size uint32) (*WebAssembly
         return nil, fmt.Errorf("Could not read number of tables in the table section: %v", err)
     }
 
+    var section WebAssemblyTableSection
+
     var i uint32
     for i = 0; i < tables; i++ {
         magic, err := sectionReader.ReadByte()
@@ -1535,13 +1639,21 @@ func (module *WebAssemblyFileModule) ReadTableSection(size uint32) (*WebAssembly
         return nil, fmt.Errorf("Error reading table section: not all bytes were read")
     }
 
-    return nil, nil
+    return &section, nil
 }
 
 type WebAssemblyElementSection struct {
 }
 
-func (section *WebAssemblyElementSection) ConvertToWast() string {
+func (section *WebAssemblyElementSection) ToInterface() WebAssemblySection {
+    if section == nil {
+        return nil
+    }
+
+    return section
+}
+
+func (section *WebAssemblyElementSection) ConvertToWast(indents string) string {
     return "(element)"
 }
 
@@ -1557,6 +1669,8 @@ func (module *WebAssemblyFileModule) ReadElementSection(size uint32) (*WebAssemb
     if err != nil {
         return nil, fmt.Errorf("Could not read elements length from the element section: %v", err)
     }
+
+    var section WebAssemblyElementSection
 
     var i uint32
     for i = 0; i < elements; i++ {
@@ -1593,13 +1707,20 @@ func (module *WebAssemblyFileModule) ReadElementSection(size uint32) (*WebAssemb
         return nil, fmt.Errorf("Error reading element section: not all bytes were read")
     }
 
-    return nil, nil
+    return &section, nil
 }
 
 type WebAssemblyCustomSection struct {
 }
 
-func (section *WebAssemblyCustomSection) ConvertToWast() string {
+func (section *WebAssemblyCustomSection) ToInterface() WebAssemblySection {
+    if section == nil {
+        return nil
+    }
+    return section
+}
+
+func (section *WebAssemblyCustomSection) ConvertToWast(indents string) string {
     return "(custom)"
 }
 
@@ -1615,6 +1736,8 @@ func (module *WebAssemblyFileModule) ReadCustomSection(size uint32) (*WebAssembl
     if err != nil {
         return nil, fmt.Errorf("Could not read name from custom section: %v", err)
     }
+
+    var section WebAssemblyCustomSection
 
     for {
         raw, err := sectionReader.ReadByte()
@@ -1635,13 +1758,20 @@ func (module *WebAssemblyFileModule) ReadCustomSection(size uint32) (*WebAssembl
 
 
     log.Printf("Custom section '%v'\n", name)
-    return nil, nil
+    return &section, nil
 }
 
 type WebAssemblyMemorySection struct {
 }
 
-func (section *WebAssemblyMemorySection) ConvertToWast() string {
+func (section *WebAssemblyMemorySection) ToInterface() WebAssemblySection {
+    if section == nil {
+        return nil
+    }
+    return section
+}
+
+func (section *WebAssemblyMemorySection) ConvertToWast(indents string) string {
     return "(memory)"
 }
 
@@ -1658,6 +1788,8 @@ func (module *WebAssemblyFileModule) ReadMemorySection(size uint32) (*WebAssembl
         return nil, fmt.Errorf("Could not read number of memory elements in memory section: %v", memories)
     }
 
+    var section WebAssemblyMemorySection
+
     var i uint32
     for i = 0; i < memories; i++ {
         limit, err := ReadLimit(sectionReader)
@@ -1669,13 +1801,20 @@ func (module *WebAssemblyFileModule) ReadMemorySection(size uint32) (*WebAssembl
 
     }
 
-    return nil, nil
+    return &section, nil
 }
 
 type WebAssemblyGlobalSection struct {
 }
 
-func (section *WebAssemblyGlobalSection) ConvertToWast() string {
+func (section *WebAssemblyGlobalSection) ToInterface() WebAssemblySection {
+    if section == nil {
+        return nil
+    }
+    return section
+}
+
+func (section *WebAssemblyGlobalSection) ConvertToWast(indents string) string {
     return "(global)"
 }
 
@@ -1692,6 +1831,8 @@ func (module *WebAssemblyFileModule) ReadGlobalSection(size uint32) (*WebAssembl
         return nil, fmt.Errorf("Could not read number of entries in the global section: %v", err)
     }
 
+    var section WebAssemblyGlobalSection
+
     var i uint32
     for i = 0; i < globals; i++ {
         global, err := ReadGlobalType(sectionReader)
@@ -1707,13 +1848,21 @@ func (module *WebAssemblyFileModule) ReadGlobalSection(size uint32) (*WebAssembl
         log.Printf("Global element %v: global=%v expressions=%v\n", i, global, expressions)
     }
 
-    return nil, nil
+    return &section, nil
 }
 
 type WebAssemblyDataSection struct {
 }
 
-func (section *WebAssemblyDataSection) ConvertToWast() string {
+func (section *WebAssemblyDataSection) ToInterface() WebAssemblySection {
+    if section == nil {
+        return nil
+    }
+
+    return section
+}
+
+func (section *WebAssemblyDataSection) ConvertToWast(indents string) string {
     return "(data)"
 }
 
@@ -1729,6 +1878,8 @@ func (module *WebAssemblyFileModule) ReadDataSection(size uint32) (*WebAssemblyD
     if err != nil {
         return nil, fmt.Errorf("Could not read number of entries in the data section: %v", err)
     }
+
+    var section WebAssemblyDataSection
 
     var i uint32
     for i = 0; i < datas; i++ {
@@ -1756,11 +1907,18 @@ func (module *WebAssemblyFileModule) ReadDataSection(size uint32) (*WebAssemblyD
         log.Printf("Data entry %v: index=%v expressions=%v init-vector=%v\n", i, memoryIndex, expressions, initVector)
     }
 
-    return nil, nil
+    return &section, nil
 }
 
 type WebAssemblyStartSection struct {
     Start FunctionIndex
+}
+
+func (section *WebAssemblyStartSection) ToInterface() WebAssemblySection {
+    if section == nil {
+        return nil
+    }
+    return section
 }
 
 func (module *WebAssemblyFileModule) ReadStartSection(size uint32) (*WebAssemblyStartSection, error) {
@@ -1781,7 +1939,7 @@ func (section *WebAssemblyStartSection) String() string {
     return "start section"
 }
 
-func (section *WebAssemblyStartSection) ConvertToWast() string {
+func (section *WebAssemblyStartSection) ConvertToWast(indents string) string {
     return fmt.Sprintf("(start %v)", section.Start.Id)
 }
 
@@ -1800,6 +1958,16 @@ const (
     DataSection byte = 11
 )
 
+func cleanup[T WebAssemblySection](a T, err error) (WebAssemblySection, error) {
+    if err != nil {
+        return nil, err
+    }
+    if reflect.ValueOf(a).IsNil() {
+        return nil, nil
+    }
+    return a, err
+}
+
 func (module *WebAssemblyFileModule) ReadSection() (WebAssemblySection, error) {
     sectionId, err := module.ReadSectionId()
     if err != nil {
@@ -1817,18 +1985,42 @@ func (module *WebAssemblyFileModule) ReadSection() (WebAssemblySection, error) {
     }
 
     switch sectionId {
-        case CustomSection: return module.ReadCustomSection(sectionSize)
-        case TypeSection: return module.ReadTypeSection(sectionSize)
-        case ImportSection: return module.ReadImportSection(sectionSize)
-        case FunctionSection: return module.ReadFunctionSection(sectionSize)
-        case TableSection: return module.ReadTableSection(sectionSize)
-        case MemorySection: return module.ReadMemorySection(sectionSize)
-        case GlobalSection: return module.ReadGlobalSection(sectionSize)
-        case ExportSection: return module.ReadExportSection(sectionSize)
-        case StartSection: return module.ReadStartSection(sectionSize)
-        case ElementSection: return module.ReadElementSection(sectionSize)
-        case CodeSection: return module.ReadCodeSection(sectionSize)
-        case DataSection: return module.ReadDataSection(sectionSize)
+        case CustomSection:
+            out, err := module.ReadCustomSection(sectionSize)
+            return out.ToInterface(), err
+        case TypeSection:
+            out, err := module.ReadTypeSection(sectionSize)
+            return out.ToInterface(), err
+        case ImportSection:
+            out, err := module.ReadImportSection(sectionSize)
+            return out.ToInterface(), err
+        case FunctionSection:
+            out, err := module.ReadFunctionSection(sectionSize)
+            return out.ToInterface(), err
+        case TableSection:
+            out, err := module.ReadTableSection(sectionSize)
+            return out.ToInterface(), err
+        case MemorySection:
+            out, err := module.ReadMemorySection(sectionSize)
+            return out.ToInterface(), err
+        case GlobalSection:
+            out, err := module.ReadGlobalSection(sectionSize)
+            return out.ToInterface(), err
+        case ExportSection:
+            out, err := module.ReadExportSection(sectionSize)
+            return out.ToInterface(), err
+        case StartSection:
+            out, err := module.ReadStartSection(sectionSize)
+            return out.ToInterface(), err
+        case ElementSection:
+            out, err := module.ReadElementSection(sectionSize)
+            return out.ToInterface(), err
+        case CodeSection:
+            out, err := module.ReadCodeSection(sectionSize)
+            return out.ToInterface(), err
+        case DataSection:
+            out, err := module.ReadDataSection(sectionSize)
+            return out.ToInterface(), err
     }
 
     return nil, fmt.Errorf("Unknown section id %v", sectionId)
@@ -1855,13 +2047,12 @@ func (module *WebAssemblyModule) AddSection(section WebAssemblySection) {
     module.Sections = append(module.Sections, section)
 }
 
-func (module *WebAssemblyModule) ConvertToWast() string {
+func (module *WebAssemblyModule) ConvertToWast(indents string) string {
     var out strings.Builder
 
     out.WriteString("(module\n")
     for _, section := range module.Sections {
-        out.WriteString("  ")
-        out.WriteString(section.ConvertToWast())
+        out.WriteString(section.ConvertToWast("  "))
         out.WriteString("\n")
     }
     out.WriteString(")")
@@ -1898,6 +2089,7 @@ func parse(path string) (WebAssemblyModule, error) {
         if err != nil {
             return WebAssemblyModule{}, err
         }
+
         if section == nil {
             return moduleOut, nil
         }
@@ -1918,7 +2110,7 @@ func main(){
         if err != nil {
             log.Printf("Error: %v\n", err)
         } else {
-            log.Println(module.ConvertToWast())
+            fmt.Println(module.ConvertToWast(""))
         }
     } else {
         log.Printf("Give a webassembly file to run\n")
