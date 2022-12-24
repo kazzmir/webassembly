@@ -179,7 +179,7 @@ func compareSExpression(s1 SExpression, s2 SExpression) bool {
 }
 
 func compare(wasmPath string, expectedWatPath string) error {
-    module, err := core.Parse(wasmPath)
+    module, err := core.Parse(wasmPath, false)
     if err != nil {
         return err
     }
@@ -205,7 +205,7 @@ func compare(wasmPath string, expectedWatPath string) error {
     }
 
     if !compareSExpression(sexprActual, sexprExpected) {
-        return fmt.Errorf("sexpressions differed")
+        return fmt.Errorf("sexpressions differed:\n%v\n%v", sexprActual, sexprExpected)
     }
 
     return nil

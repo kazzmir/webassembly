@@ -26,9 +26,10 @@ type WebAssemblyFileModule struct {
     path string
     io io.ReadCloser
     reader *bufio.Reader
+    debug bool
 }
 
-func WebAssemblyNew(path string) (WebAssemblyFileModule, error) {
+func WebAssemblyNew(path string, debug bool) (WebAssemblyFileModule, error) {
     file, err := os.Open(path)
     if err != nil {
         return WebAssemblyFileModule{}, err
@@ -38,6 +39,7 @@ func WebAssemblyNew(path string) (WebAssemblyFileModule, error) {
         path: path,
         io: file,
         reader: bufio.NewReader(file),
+        debug: debug,
     }, nil
 }
 
@@ -323,7 +325,9 @@ func (module *WebAssemblyFileModule) ReadFunctionType(reader io.Reader) (WebAsse
         return WebAssemblyFunction{}, err
     }
 
-    log.Printf("Function %v -> %v\n", inputTypes, outputTypes)
+    if module.debug {
+        log.Printf("Function %v -> %v\n", inputTypes, outputTypes)
+    }
 
     return WebAssemblyFunction{
         InputTypes: inputTypes,
@@ -361,7 +365,9 @@ func NewByteReader(reader io.Reader) *ByteReader {
 }
 
 func (module *WebAssemblyFileModule) ReadTypeSection(sectionSize uint32) (*WebAssemblyTypeSection, error) {
-    log.Printf("Type section size %v\n", sectionSize)
+    if module.debug {
+        log.Printf("Type section size %v\n", sectionSize)
+    }
     sectionReader := NewByteReader(io.LimitReader(module.reader, int64(sectionSize)))
     /*
     sectionReader := &io.LimitedReader{
@@ -698,7 +704,9 @@ func ReadImportDescription(reader *ByteReader) (Index, error) {
 }
 
 func (module *WebAssemblyFileModule) ReadImportSection(sectionSize uint32) (*WebAssemblyImportSection, error) {
-    log.Printf("Read import section size %v\n", sectionSize)
+    if module.debug {
+        log.Printf("Read import section size %v\n", sectionSize)
+    }
 
     sectionReader := NewByteReader(io.LimitReader(module.reader, int64(sectionSize)))
 
@@ -707,7 +715,9 @@ func (module *WebAssemblyFileModule) ReadImportSection(sectionSize uint32) (*Web
         return nil, fmt.Errorf("Could not read imports: %v", err)
     }
 
-    log.Printf("Have %v imports\n", imports)
+    if module.debug {
+        log.Printf("Have %v imports\n", imports)
+    }
 
     var section WebAssemblyImportSection
 
@@ -728,7 +738,9 @@ func (module *WebAssemblyFileModule) ReadImportSection(sectionSize uint32) (*Web
             return nil, err
         }
 
-        log.Printf("Import %v: module='%v' name='%v' kind='%v'\n", i, moduleName, name, kind.String())
+        if module.debug {
+            log.Printf("Import %v: module='%v' name='%v' kind='%v'\n", i, moduleName, name, kind.String())
+        }
 
         section.AddImport(moduleName, name, kind)
     }
@@ -769,7 +781,9 @@ func (section *WebAssemblyFunctionSection) String() string {
 }
 
 func (module *WebAssemblyFileModule) ReadFunctionSection(size uint32) (*WebAssemblyFunctionSection, error) {
-    log.Printf("Read function section size %v\n", size)
+    if module.debug {
+        log.Printf("Read function section size %v\n", size)
+    }
 
     sectionReader := NewByteReader(io.LimitReader(module.reader, int64(size)))
     types, err := ReadU32(sectionReader)
@@ -779,7 +793,9 @@ func (module *WebAssemblyFileModule) ReadFunctionSection(size uint32) (*WebAssem
 
     var section WebAssemblyFunctionSection
 
-    log.Printf("Functions %v\n", types)
+    if module.debug {
+        log.Printf("Functions %v\n", types)
+    }
 
     var i uint32
     for i = 0; i < types; i++ {
@@ -788,7 +804,9 @@ func (module *WebAssemblyFileModule) ReadFunctionSection(size uint32) (*WebAssem
             return nil, err
         }
 
-        log.Printf("Function %v has type index 0x%x\n", i, index)
+        if module.debug {
+            log.Printf("Function %v has type index 0x%x\n", i, index)
+        }
 
         section.AddFunction(index)
     }
@@ -923,7 +941,9 @@ func ReadExportDescription(reader *ByteReader) (Index, error) {
 }
 
 func (module *WebAssemblyFileModule) ReadExportSection(size uint32) (*WebAssemblyExportSection, error) {
-    log.Printf("Read export section size %v\n", size)
+    if module.debug {
+        log.Printf("Read export section size %v\n", size)
+    }
 
     sectionReader := NewByteReader(io.LimitReader(module.reader, int64(size)))
 
@@ -946,7 +966,9 @@ func (module *WebAssemblyFileModule) ReadExportSection(size uint32) (*WebAssembl
             return nil, fmt.Errorf("Could not read description for export %v: %v", i, err)
         }
 
-        log.Printf("Export %v: name='%v' description=%v\n", i, name, description)
+        if module.debug {
+            log.Printf("Export %v: name='%v' description=%v\n", i, name, description)
+        }
 
         section.AddExport(name, description)
     }
@@ -1155,6 +1177,7 @@ func ReadMemoryArgument(reader *ByteReader) (MemoryArgument, error) {
  */
 func ReadExpressionSequence(reader *ByteReader, readingIf bool) ([]Expression, ExpressionSequenceEnd, error) {
 
+    debug := false
     var sequence []Expression
 
     count := 0
@@ -1164,7 +1187,9 @@ func ReadExpressionSequence(reader *ByteReader, readingIf bool) ([]Expression, E
             return nil, 0, fmt.Errorf("Could not read instruction: %v", err)
         }
 
-        log.Printf("Instruction %v: 0x%x\n", count, instruction)
+        if debug {
+            log.Printf("Instruction %v: 0x%x\n", count, instruction)
+        }
 
         switch instruction {
             /* unreachable */
@@ -1237,7 +1262,9 @@ func ReadExpressionSequence(reader *ByteReader, readingIf bool) ([]Expression, E
 
             /* termination of a block / instruction sequence */
             case 0xb:
-                log.Printf("Read %v instructions\n", count+1)
+                if debug {
+                    log.Printf("Read %v instructions\n", count+1)
+                }
                 return sequence, SequenceEnd, nil
 
             /* br */
@@ -1718,8 +1745,11 @@ func ReadCode(reader *ByteReader) (Code, error) {
     if err != nil {
         return Code{}, fmt.Errorf("Could not read locals: %v", err)
     }
+    debug := false
 
-    log.Printf("Read code locals %v\n", locals)
+    if debug {
+        log.Printf("Read code locals %v\n", locals)
+    }
 
     var code Code
 
@@ -1735,7 +1765,9 @@ func ReadCode(reader *ByteReader) (Code, error) {
             return Code{}, fmt.Errorf("Could not read type of local for %v: %v", i, err)
         }
 
-        log.Printf("Local %v; count=%v type=0x%x\n", i, count, valueType)
+        if debug {
+            log.Printf("Local %v; count=%v type=0x%x\n", i, count, valueType)
+        }
 
         code.AddLocal(count, valueType)
     }
@@ -1751,7 +1783,9 @@ func ReadCode(reader *ByteReader) (Code, error) {
 }
 
 func (module *WebAssemblyFileModule) ReadCodeSection(size uint32) (*WebAssemblyCodeSection, error) {
-    log.Printf("Read code section size %v\n", size)
+    if module.debug {
+        log.Printf("Read code section size %v\n", size)
+    }
     sectionReader := NewByteReader(io.LimitReader(module.reader, int64(size)))
 
     codes, err := ReadU32(sectionReader)
@@ -1768,7 +1802,9 @@ func (module *WebAssemblyFileModule) ReadCodeSection(size uint32) (*WebAssemblyC
             return nil, fmt.Errorf("Error reading size of code %v: %v", i, err)
         }
 
-        log.Printf("Reading code entry %v size %v\n", i, size)
+        if module.debug {
+            log.Printf("Reading code entry %v size %v\n", i, size)
+        }
 
         codeReader := NewByteReader(io.LimitReader(sectionReader, int64(size)))
         code, err := ReadCode(codeReader)
@@ -1781,7 +1817,9 @@ func (module *WebAssemblyFileModule) ReadCodeSection(size uint32) (*WebAssemblyC
             return nil, fmt.Errorf("Error reading code %v: not all bytes were read", i)
         }
 
-        log.Printf("Code %v: size=%v code=%v\n", i, size, code)
+        if module.debug {
+            log.Printf("Code %v: size=%v code=%v\n", i, size, code)
+        }
 
         section.AddCode(code)
     }
@@ -1892,7 +1930,9 @@ const RefTypeFunction = 0x70
 const RefTypeExtern = 0x69
 
 func (module *WebAssemblyFileModule) ReadTableSection(size uint32) (*WebAssemblyTableSection, error) {
-    log.Printf("Read table section size %v\n", size)
+    if module.debug {
+        log.Printf("Read table section size %v\n", size)
+    }
     sectionReader := NewByteReader(io.LimitReader(module.reader, int64(size)))
 
     tables, err := ReadU32(sectionReader)
@@ -1918,7 +1958,9 @@ func (module *WebAssemblyFileModule) ReadTableSection(size uint32) (*WebAssembly
             return nil, fmt.Errorf("Could not read limit for table entry %v: %v", i, err)
         }
 
-        log.Printf("Table entry %v: limit=%v refType=%v\n", i, limit, refType)
+        if module.debug {
+            log.Printf("Table entry %v: limit=%v refType=%v\n", i, limit, refType)
+        }
 
         section.AddTable(limit, refType)
     }
@@ -2018,7 +2060,9 @@ func (section *WebAssemblyElementSection) String() string {
 }
 
 func (module *WebAssemblyFileModule) ReadElementSection(size uint32) (*WebAssemblyElementSection, error) {
-    log.Printf("Read element section size %v\n", size)
+    if module.debug {
+        log.Printf("Read element section size %v\n", size)
+    }
     sectionReader := NewByteReader(io.LimitReader(module.reader, int64(size)))
 
     elements, err := ReadU32(sectionReader)
@@ -2050,7 +2094,9 @@ func (module *WebAssemblyFileModule) ReadElementSection(size uint32) (*WebAssemb
                     return nil, fmt.Errorf("Could not read function index vector for element %v: %v", i, err)
                 }
 
-                log.Printf("Element %v: index=%v expressions=%v\n", i, index, expressions)
+                if module.debug {
+                    log.Printf("Element %v: index=%v expressions=%v\n", i, index, expressions)
+                }
 
                 section.AddFunctionRefInit(functions, expressions)
             case 1:
@@ -2090,7 +2136,9 @@ func (section *WebAssemblyCustomSection) String() string {
 }
 
 func (module *WebAssemblyFileModule) ReadCustomSection(size uint32) (*WebAssemblyCustomSection, error) {
-    log.Printf("Read custom section size %v\n", size)
+    if module.debug {
+        log.Printf("Read custom section size %v\n", size)
+    }
     sectionReader := NewByteReader(io.LimitReader(module.reader, int64(size)))
 
     name, err := ReadName(sectionReader)
@@ -2117,8 +2165,10 @@ func (module *WebAssemblyFileModule) ReadCustomSection(size uint32) (*WebAssembl
         return nil, fmt.Errorf("Error reading custom section: not all bytes were read")
     }
 
+    if module.debug {
+        log.Printf("Custom section '%v'\n", name)
+    }
 
-    log.Printf("Custom section '%v'\n", name)
     return &section, nil
 }
 
@@ -2141,7 +2191,9 @@ func (section *WebAssemblyMemorySection) String() string {
 }
 
 func (module *WebAssemblyFileModule) ReadMemorySection(size uint32) (*WebAssemblyMemorySection, error) {
-    log.Printf("Read memory section size %v\n", size)
+    if module.debug {
+        log.Printf("Read memory section size %v\n", size)
+    }
     sectionReader := NewByteReader(io.LimitReader(module.reader, int64(size)))
 
     memories, err := ReadU32(sectionReader)
@@ -2158,7 +2210,9 @@ func (module *WebAssemblyFileModule) ReadMemorySection(size uint32) (*WebAssembl
             return nil, fmt.Errorf("Could not read memory element %v: %v", i, err)
         }
 
-        log.Printf("Read memory element %v: %v\n", i, limit)
+        if module.debug {
+            log.Printf("Read memory element %v: %v\n", i, limit)
+        }
 
     }
 
@@ -2205,7 +2259,9 @@ func (section *WebAssemblyGlobalSection) String() string {
 }
 
 func (module *WebAssemblyFileModule) ReadGlobalSection(size uint32) (*WebAssemblyGlobalSection, error) {
-    log.Printf("Read global section size %v\n", size)
+    if module.debug {
+        log.Printf("Read global section size %v\n", size)
+    }
     sectionReader := NewByteReader(io.LimitReader(module.reader, int64(size)))
 
     globals, err := ReadU32(sectionReader)
@@ -2227,7 +2283,9 @@ func (module *WebAssemblyFileModule) ReadGlobalSection(size uint32) (*WebAssembl
             return nil, fmt.Errorf("Could not read expressions for global %v: %v", i, err)
         }
 
-        log.Printf("Global element %v: global=%v expressions=%v\n", i, global, expressions)
+        if module.debug {
+            log.Printf("Global element %v: global=%v expressions=%v\n", i, global, expressions)
+        }
 
         section.AddGlobal(global, expressions)
     }
@@ -2255,7 +2313,9 @@ func (section *WebAssemblyDataSection) String() string {
 }
 
 func (module *WebAssemblyFileModule) ReadDataSection(size uint32) (*WebAssemblyDataSection, error) {
-    log.Printf("Read data section size %v\n", size)
+    if module.debug {
+        log.Printf("Read data section size %v\n", size)
+    }
     sectionReader := NewByteReader(io.LimitReader(module.reader, int64(size)))
 
     datas, err := ReadU32(sectionReader)
@@ -2288,7 +2348,9 @@ func (module *WebAssemblyFileModule) ReadDataSection(size uint32) (*WebAssemblyD
             return nil, fmt.Errorf("Could not read %v bytes of init vector for data entry %v: %v", bytes, i, err)
         }
 
-        log.Printf("Data entry %v: index=%v expressions=%v init-vector=%v\n", i, memoryIndex, expressions, initVector)
+        if module.debug {
+            log.Printf("Data entry %v: index=%v expressions=%v init-vector=%v\n", i, memoryIndex, expressions, initVector)
+        }
     }
 
     return &section, nil
@@ -2306,7 +2368,9 @@ func (section *WebAssemblyStartSection) ToInterface() WebAssemblySection {
 }
 
 func (module *WebAssemblyFileModule) ReadStartSection(size uint32) (*WebAssemblyStartSection, error) {
-    log.Printf("Read start section size %v\n", size)
+    if module.debug {
+        log.Printf("Read start section size %v\n", size)
+    }
     sectionReader := NewByteReader(io.LimitReader(module.reader, int64(size)))
 
     startIndex, err := ReadFunctionIndex(sectionReader)
@@ -2456,8 +2520,8 @@ func (module *WebAssemblyModule) ConvertToWast(indents string) string {
     return out.String()
 }
 
-func Parse(path string) (WebAssemblyModule, error) {
-    module, err := WebAssemblyNew(path)
+func Parse(path string, debug bool) (WebAssemblyModule, error) {
+    module, err := WebAssemblyNew(path, debug)
     if err != nil {
         return WebAssemblyModule{}, err
     }
@@ -2490,7 +2554,9 @@ func Parse(path string) (WebAssemblyModule, error) {
             return moduleOut, nil
         }
 
-        log.Printf("Read section '%v'\n", section.String())
+        if module.debug {
+            log.Printf("Read section '%v'\n", section.String())
+        }
         moduleOut.AddSection(section)
     }
 

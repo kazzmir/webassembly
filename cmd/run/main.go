@@ -12,7 +12,7 @@ func main(){
     log.Printf("Web assembly runner\n")
 
     if len(os.Args) > 1 {
-        module, err := core.Parse(os.Args[1])
+        module, err := core.Parse(os.Args[1], true)
         if err != nil {
             log.Printf("Error: %v\n", err)
         } else {
