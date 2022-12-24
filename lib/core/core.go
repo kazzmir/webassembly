@@ -96,6 +96,14 @@ func (section *WebAssemblyTypeSection) ToInterface() WebAssemblySection {
     return section
 }
 
+func (section *WebAssemblyTypeSection) GetFunction(index uint32) WebAssemblyFunction {
+    if index < uint32(len(section.Functions)) {
+        return section.Functions[index]
+    }
+
+    return WebAssemblyFunction{}
+}
+
 func (section *WebAssemblyTypeSection) AddFunctionType(function WebAssemblyFunction) {
     section.Functions = append(section.Functions, function)
 }
@@ -1006,7 +1014,20 @@ func (section *WebAssemblyCodeSection) ConvertToWast(module *WebAssemblyModule, 
         if typeIndex == nil {
             out.WriteString(fmt.Sprintf("unknown function type index for function %v", i))
         } else {
-            out.WriteString(fmt.Sprintf("(func (;%v;) (type %v)\n", i+startIndex, typeIndex.Id))
+            out.WriteString(fmt.Sprintf("(func (;%v;) (type %v)", i+startIndex, typeIndex.Id))
+
+            function := module.GetFunction(typeIndex.Id)
+
+            if len(function.OutputTypes) > 0 {
+                out.WriteString(" (result")
+                for _, output := range function.OutputTypes {
+                    out.WriteByte(' ')
+                    out.WriteString(output.ConvertToWast(""))
+                }
+                out.WriteString(")")
+            }
+
+            out.WriteByte('\n')
         }
         out.WriteString(code.ConvertToWast(indents + "  "))
         out.WriteString(")\n")
@@ -2490,6 +2511,17 @@ func (module *WebAssemblyModule) FindFunctionType(index int) *TypeIndex {
     }
 
     return nil
+}
+
+func (module *WebAssemblyModule) GetFunction(index uint32) WebAssemblyFunction {
+    for _, section := range module.Sections {
+        type_, ok := section.(*WebAssemblyTypeSection)
+        if ok {
+            return type_.GetFunction(index)
+        }
+    }
+
+    return WebAssemblyFunction{}
 }
 
 func (module *WebAssemblyModule) GetImportFunctionCount() int {
