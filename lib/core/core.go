@@ -1025,6 +1025,16 @@ func (section *WebAssemblyCodeSection) ConvertToWast(module *WebAssemblyModule, 
 
             function := module.GetFunction(typeIndex.Id)
 
+            if len(function.InputTypes) > 0 {
+                out.WriteString(" (param")
+                for _, input := range function.InputTypes {
+                    out.WriteByte(' ')
+                    out.WriteString(input.ConvertToWast(""))
+                }
+                out.WriteByte(')')
+            }
+
+
             if len(function.OutputTypes) > 0 {
                 out.WriteString(" (result")
                 for _, output := range function.OutputTypes {
@@ -1056,12 +1066,36 @@ type Code struct {
     Expressions []Expression
 }
 
+type Stack[T any] struct {
+    Values []T
+}
+
+func (stack *Stack[T]) Size() int {
+    return len(stack.Values)
+}
+
+func (stack *Stack[T]) Get(depth uint32) T {
+    return stack.Values[len(stack.Values) - int(depth) - 1]
+}
+
+func (stack *Stack[T]) Push(value T){
+    stack.Values = append(stack.Values, value)
+}
+
+func (stack *Stack[T]) Pop() T {
+    t := stack.Values[len(stack.Values)-1]
+    stack.Values = stack.Values[0:len(stack.Values)-1]
+    return t
+}
+
 func (code *Code) ConvertToWast(indents string) string {
     var out strings.Builder
 
+    var labelStack Stack[int]
+
     if len(code.Locals) > 0 {
         out.WriteString(indents)
-        out.WriteString("(locals")
+        out.WriteString("(local")
         for i, local := range code.Locals {
             out.WriteByte(' ')
             for x := 0; x < int(local.Count); x++ {
@@ -1080,7 +1114,7 @@ func (code *Code) ConvertToWast(indents string) string {
 
     for i, expression := range code.Expressions {
         out.WriteString(indents)
-        out.WriteString(expression.ConvertToWast(indents))
+        out.WriteString(expression.ConvertToWast(labelStack, indents))
         if i < len(code.Expressions) - 1 {
             out.WriteByte('\n')
         }
@@ -1098,14 +1132,14 @@ func (code *Code) SetExpressions(expressions []Expression){
 }
 
 type Expression interface {
-    ConvertToWast(string) string
+    ConvertToWast(Stack[int], string) string
 }
 
 type CallExpression struct {
     Index *FunctionIndex
 }
 
-func (call *CallExpression) ConvertToWast(indents string) string {
+func (call *CallExpression) ConvertToWast(labels Stack[int], indents string) string {
     return fmt.Sprintf("call %v", call.Index.Id)
 }
 
@@ -1113,23 +1147,23 @@ type BranchIfExpression struct {
     Label uint32
 }
 
-func (expr *BranchIfExpression) ConvertToWast(indents string) string {
-    return fmt.Sprintf("br_if %v", expr.Label)
+func (expr *BranchIfExpression) ConvertToWast(labels Stack[int], indents string) string {
+    return fmt.Sprintf("br_if %v (;@%v;)", expr.Label, labels.Get(expr.Label))
 }
 
 type BranchExpression struct {
     Label uint32
 }
 
-func (expr *BranchExpression) ConvertToWast(indents string) string {
-    return fmt.Sprintf("br %v", expr.Label)
+func (expr *BranchExpression) ConvertToWast(labels Stack[int], indents string) string {
+    return fmt.Sprintf("br %v (;@%v;)", expr.Label, labels.Get(expr.Label))
 }
 
 type RefFuncExpression struct {
     Function *FunctionIndex
 }
 
-func (expr *RefFuncExpression) ConvertToWast(indents string) string {
+func (expr *RefFuncExpression) ConvertToWast(labels Stack[int], indents string) string {
     return fmt.Sprintf("ref.func %v", expr.Function.Id)
 }
 
@@ -1137,14 +1171,14 @@ type I32ConstExpression struct {
     N int32
 }
 
-func (expr *I32ConstExpression) ConvertToWast(indents string) string {
+func (expr *I32ConstExpression) ConvertToWast(labels Stack[int], indents string) string {
     return fmt.Sprintf("i32.const %v", expr.N)
 }
 
 type I32AddExpression struct {
 }
 
-func (expr *I32AddExpression) ConvertToWast(indents string) string {
+func (expr *I32AddExpression) ConvertToWast(labels Stack[int], indents string) string {
     return "i32.add"
 }
 
@@ -1152,28 +1186,28 @@ type I32LoadExpression struct {
     Memory MemoryArgument
 }
 
-func (expr *I32LoadExpression) ConvertToWast(indents string) string {
+func (expr *I32LoadExpression) ConvertToWast(labels Stack[int], indents string) string {
     return "i32.load"
 }
 
 type I32EqExpression struct {
 }
 
-func (expr *I32EqExpression) ConvertToWast(indents string) string {
+func (expr *I32EqExpression) ConvertToWast(labels Stack[int], indents string) string {
     return "i32.eq"
 }
 
 type I32DivSignedExpression struct {
 }
 
-func (expr *I32DivSignedExpression) ConvertToWast(indents string) string {
+func (expr *I32DivSignedExpression) ConvertToWast(labels Stack[int], indents string) string {
     return "i32.div_s"
 }
 
 type I32MulExpression struct {
 }
 
-func (expr *I32MulExpression) ConvertToWast(indents string) string {
+func (expr *I32MulExpression) ConvertToWast(labels Stack[int], indents string) string {
     return "i32.mul"
 }
 
@@ -1181,7 +1215,7 @@ type LocalGetExpression struct {
     Local uint32
 }
 
-func (expr *LocalGetExpression) ConvertToWast(indents string) string {
+func (expr *LocalGetExpression) ConvertToWast(labels Stack[int], indents string) string {
     return fmt.Sprintf("local.get %v", expr.Local)
 }
 
@@ -1189,7 +1223,7 @@ type LocalSetExpression struct {
     Local uint32
 }
 
-func (expr *LocalSetExpression) ConvertToWast(indents string) string {
+func (expr *LocalSetExpression) ConvertToWast(labels Stack[int], indents string) string {
     return fmt.Sprintf("local.set %v", expr.Local)
 }
 
@@ -1197,7 +1231,7 @@ type GlobalGetExpression struct {
     Global *GlobalIndex
 }
 
-func (expr *GlobalGetExpression) ConvertToWast(indents string) string {
+func (expr *GlobalGetExpression) ConvertToWast(labels Stack[int], indents string) string {
     return fmt.Sprintf("global.get %v", expr.Global.Id)
 }
 
@@ -1205,7 +1239,7 @@ type GlobalSetExpression struct {
     Global *GlobalIndex
 }
 
-func (expr *GlobalSetExpression) ConvertToWast(indents string) string {
+func (expr *GlobalSetExpression) ConvertToWast(labels Stack[int], indents string) string {
     return fmt.Sprintf("global.set %v", expr.Global.Id)
 }
 
@@ -1222,21 +1256,26 @@ type BlockExpression struct {
     Kind BlockKind
 }
 
-func (block *BlockExpression) ConvertToWast(indents string) string {
+func (block *BlockExpression) ConvertToWast(labels Stack[int], indents string) string {
+    labels.Push(labels.Size()+1)
+    defer labels.Pop()
+
+    labelNumber := labels.Size()
+
     var out strings.Builder
 
     switch block.Kind {
         case BlockKindBlock:
-            out.WriteString("block\n")
+            out.WriteString(fmt.Sprintf("block ;; label = @%v\n", labelNumber))
         case BlockKindLoop:
-            out.WriteString("loop\n")
+            out.WriteString(fmt.Sprintf("loop ;; label = @%v\n", labelNumber))
         case BlockKindIf:
-            out.WriteString("if\n")
+            out.WriteString(fmt.Sprintf("if ;; label = @%v\n", labelNumber))
     }
 
     for _, expression := range block.Instructions {
         out.WriteString(indents + "  ")
-        out.WriteString(expression.ConvertToWast(indents + "  "))
+        out.WriteString(expression.ConvertToWast(labels, indents + "  "))
         out.WriteByte('\n')
     }
     out.WriteString(indents)
@@ -2169,8 +2208,9 @@ func (section *WebAssemblyElementSection) ConvertToWast(module *WebAssemblyModul
         active, isActive := element.Mode.(*ElementModeActive)
         if isActive {
             out.WriteString("(")
+            var labels Stack[int]
             for _, expr := range active.Offset {
-                out.WriteString(expr.ConvertToWast(indents))
+                out.WriteString(expr.ConvertToWast(labels, indents))
             }
             out.WriteString(") ")
         }
