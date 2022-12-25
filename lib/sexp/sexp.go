@@ -1,7 +1,16 @@
 package sexp
 
+/* Parse .wast style sexpressions. These are slightly restricted sexpressions in that
+ * every sexpression always starts with some name, such as (x a b). The first thing
+ * in an sexpression will never be another sexpression, such as ((f) b c)
+ */
+
 import (
     "fmt"
+    "io"
+    "bufio"
+    "os"
+    "errors"
     "sort"
     "strings"
 )
@@ -88,7 +97,7 @@ type Token struct {
     Kind int
 }
 
-func nextToken(reader *strings.Reader) Token {
+func nextToken(reader io.ByteScanner) Token {
     for {
         first, err := reader.ReadByte()
         if err != nil {
@@ -152,9 +161,9 @@ func nextToken(reader *strings.Reader) Token {
     }
 }
 
-func ParseSExpression(data string) (SExpression, error) {
-    reader := strings.NewReader(data)
+var MismatchedParensError = errors.New("unmatched right parens")
 
+func ParseSExpressionReader(reader io.ByteScanner) (SExpression, error) {
     var top *SExpression
     var current *SExpression
     
@@ -185,8 +194,12 @@ func ParseSExpression(data string) (SExpression, error) {
         }
     }
 
+    if top == nil {
+        return SExpression{}, io.EOF
+    }
+
     if current != nil {
-        return SExpression{}, fmt.Errorf("did not parse all parens")
+        return SExpression{}, MismatchedParensError
     }
 
     if nextToken(reader).Kind != TokenEOF {
@@ -196,3 +209,16 @@ func ParseSExpression(data string) (SExpression, error) {
     return *top, nil
 }
 
+func ParseSExpression(data string) (SExpression, error) {
+    return ParseSExpressionReader(strings.NewReader(data))
+}
+
+func ParseSExpressionFile(path string) (SExpression, error) {
+    file, err := os.Open(path)
+    if err != nil {
+        return SExpression{}, err
+    }
+    defer file.Close()
+
+    return ParseSExpressionReader(bufio.NewReader(file))
+}
