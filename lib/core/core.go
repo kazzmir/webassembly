@@ -464,6 +464,13 @@ func (section *WebAssemblyImportSection) ConvertToWast(module *WebAssemblyModule
                 } else {
                     out.WriteString(global.ValueType.ConvertToWast(indents))
                 }
+            case *MemoryImportType:
+                memory := item.Kind.(*MemoryImportType)
+                out.WriteString(fmt.Sprintf("\"%v\" \"%v\" (memory (;%v;) %v", item.ModuleName, item.Name, i, memory.Limit.Minimum))
+                if memory.Limit.HasMaximum {
+                    out.WriteString(fmt.Sprintf(" %v", memory.Limit.Maximum))
+                }
+                out.WriteByte(')')
             default:
                 out.WriteString(fmt.Sprintf("unhandled import type %+v", item.Kind))
         }
@@ -704,7 +711,7 @@ func ReadImportDescription(reader *ByteReader) (Index, error) {
     switch kind {
         case byte(FunctionImportDescription): return ReadFunctionImport(reader)
         case byte(TableImportDescription): return ReadTableIndex(reader)
-        case byte(MemoryImportDescription): return ReadMemoryIndex(reader)
+        case byte(MemoryImportDescription): return ReadMemoryType(reader)
         case byte(GlobalImportDescription): return ReadGlobalType(reader)
     }
 
@@ -1052,6 +1059,25 @@ type Code struct {
 func (code *Code) ConvertToWast(indents string) string {
     var out strings.Builder
 
+    if len(code.Locals) > 0 {
+        out.WriteString(indents)
+        out.WriteString("(locals")
+        for i, local := range code.Locals {
+            out.WriteByte(' ')
+            for x := 0; x < int(local.Count); x++ {
+                out.WriteString(local.Type.ConvertToWast(indents))
+                if x < int(local.Count) - 1 {
+                    out.WriteByte(' ')
+                }
+            }
+            if i < len(code.Locals) - 1 {
+                out.WriteByte(' ')
+            }
+        }
+        out.WriteByte(')')
+        out.WriteByte('\n')
+    }
+
     for i, expression := range code.Expressions {
         out.WriteString(indents)
         out.WriteString(expression.ConvertToWast(indents))
@@ -1083,6 +1109,22 @@ func (call *CallExpression) ConvertToWast(indents string) string {
     return fmt.Sprintf("call %v", call.Index.Id)
 }
 
+type BranchIfExpression struct {
+    Label uint32
+}
+
+func (expr *BranchIfExpression) ConvertToWast(indents string) string {
+    return fmt.Sprintf("br_if %v", expr.Label)
+}
+
+type BranchExpression struct {
+    Label uint32
+}
+
+func (expr *BranchExpression) ConvertToWast(indents string) string {
+    return fmt.Sprintf("br %v", expr.Label)
+}
+
 type RefFuncExpression struct {
     Function *FunctionIndex
 }
@@ -1106,11 +1148,49 @@ func (expr *I32AddExpression) ConvertToWast(indents string) string {
     return "i32.add"
 }
 
+type I32LoadExpression struct {
+    Memory MemoryArgument
+}
+
+func (expr *I32LoadExpression) ConvertToWast(indents string) string {
+    return "i32.load"
+}
+
+type I32EqExpression struct {
+}
+
+func (expr *I32EqExpression) ConvertToWast(indents string) string {
+    return "i32.eq"
+}
+
 type I32DivSignedExpression struct {
 }
 
 func (expr *I32DivSignedExpression) ConvertToWast(indents string) string {
     return "i32.div_s"
+}
+
+type I32MulExpression struct {
+}
+
+func (expr *I32MulExpression) ConvertToWast(indents string) string {
+    return "i32.mul"
+}
+
+type LocalGetExpression struct {
+    Local uint32
+}
+
+func (expr *LocalGetExpression) ConvertToWast(indents string) string {
+    return fmt.Sprintf("local.get %v", expr.Local)
+}
+
+type LocalSetExpression struct {
+    Local uint32
+}
+
+func (expr *LocalSetExpression) ConvertToWast(indents string) string {
+    return fmt.Sprintf("local.set %v", expr.Local)
 }
 
 type GlobalGetExpression struct {
@@ -1129,8 +1209,40 @@ func (expr *GlobalSetExpression) ConvertToWast(indents string) string {
     return fmt.Sprintf("global.set %v", expr.Global.Id)
 }
 
+type BlockKind int
+const (
+    BlockKindBlock = iota
+    BlockKindLoop
+    BlockKindIf
+)
+
 type BlockExpression struct {
     Expression
+    Instructions []Expression
+    Kind BlockKind
+}
+
+func (block *BlockExpression) ConvertToWast(indents string) string {
+    var out strings.Builder
+
+    switch block.Kind {
+        case BlockKindBlock:
+            out.WriteString("block\n")
+        case BlockKindLoop:
+            out.WriteString("loop\n")
+        case BlockKindIf:
+            out.WriteString("if\n")
+    }
+
+    for _, expression := range block.Instructions {
+        out.WriteString(indents + "  ")
+        out.WriteString(expression.ConvertToWast(indents + "  "))
+        out.WriteByte('\n')
+    }
+    out.WriteString(indents)
+    out.WriteString("end")
+
+    return out.String()
 }
 
 type ExpressionSequenceEnd uint32
@@ -1165,9 +1277,7 @@ func ReadBlockInstruction(reader *ByteReader, readingIf bool) (BlockExpression, 
         return BlockExpression{}, 0, fmt.Errorf("Unable to read block instructions: %v", err)
     }
 
-    _ = instructions
-
-    return BlockExpression{}, end, nil
+    return BlockExpression{Instructions: instructions}, end, nil
 }
 
 type MemoryArgument struct {
@@ -1226,7 +1336,9 @@ func ReadExpressionSequence(reader *ByteReader, readingIf bool) ([]Expression, E
                     return nil, 0, fmt.Errorf("Could not read block instruction %v: %v", count, err)
                 }
 
-                _ = block
+                block.Kind = BlockKindBlock
+
+                sequence = append(sequence, &block)
 
             /* loop */
             case 0x03:
@@ -1235,7 +1347,9 @@ func ReadExpressionSequence(reader *ByteReader, readingIf bool) ([]Expression, E
                     return nil, 0, fmt.Errorf("Could not read block instruction %v: %v", count, err)
                 }
 
-                _ = loop
+                loop.Kind = BlockKindLoop
+
+                sequence = append(sequence, &loop)
 
             /* if */
             case 0x04:
@@ -1243,6 +1357,8 @@ func ReadExpressionSequence(reader *ByteReader, readingIf bool) ([]Expression, E
                 if err != nil {
                     return nil, 0, fmt.Errorf("Could not read if block instruction %v: %v", count, err)
                 }
+
+                ifBlock.Kind = BlockKindIf
 
                 if end == SequenceIf {
                     elseExpression, _, err := ReadExpressionSequence(reader, false)
@@ -1253,7 +1369,7 @@ func ReadExpressionSequence(reader *ByteReader, readingIf bool) ([]Expression, E
                     _ = elseExpression
                 }
 
-                _ = ifBlock
+                sequence = append(sequence, &ifBlock)
 
             /* else */
             case 0x05:
@@ -1295,7 +1411,7 @@ func ReadExpressionSequence(reader *ByteReader, readingIf bool) ([]Expression, E
                     return nil, 0, fmt.Errorf("Could not read label index for br at instruction %v: %v", count, err)
                 }
 
-                _ = label
+                sequence = append(sequence, &BranchExpression{Label: label})
 
             /* br_if */
             case 0xd:
@@ -1304,7 +1420,7 @@ func ReadExpressionSequence(reader *ByteReader, readingIf bool) ([]Expression, E
                     return nil, 0, fmt.Errorf("Could not read label index for br_if at instruction %v: %v", count, err)
                 }
 
-                _ = label
+                sequence = append(sequence, &BranchIfExpression{Label: label})
 
             /* br_table */
             case 0xe:
@@ -1349,7 +1465,7 @@ func ReadExpressionSequence(reader *ByteReader, readingIf bool) ([]Expression, E
                     return nil, 0, fmt.Errorf("Could not read local index instruction %v: %v", count, err)
                 }
 
-                _ = local
+                sequence = append(sequence, &LocalGetExpression{Local: local})
 
             /* local.set */
             case 0x21:
@@ -1358,7 +1474,7 @@ func ReadExpressionSequence(reader *ByteReader, readingIf bool) ([]Expression, E
                     return nil, 0, fmt.Errorf("Could not read local index instruction %v: %v", count, err)
                 }
 
-                _ = local
+                sequence = append(sequence, &LocalSetExpression{Local: local})
 
             /* local.tee */
             case 0x22:
@@ -1387,7 +1503,7 @@ func ReadExpressionSequence(reader *ByteReader, readingIf bool) ([]Expression, E
 
                 sequence = append(sequence, &GlobalSetExpression{Global: global})
 
-            /* i32.load */
+                /* i32.load */
             case 0x28,
                  /* i64.load */
                  0x29,
@@ -1439,7 +1555,10 @@ func ReadExpressionSequence(reader *ByteReader, readingIf bool) ([]Expression, E
                     return nil, 0, fmt.Errorf("Could not read memory argument for instruction %v: %v", count, err)
                 }
 
-                _ = memory
+                switch instruction {
+                    case 0x28:
+                        sequence = append(sequence, &I32LoadExpression{Memory: memory})
+                }
 
             /* memory.size */
             case 0x3f,
@@ -1499,11 +1618,14 @@ func ReadExpressionSequence(reader *ByteReader, readingIf bool) ([]Expression, E
             /* No-argument instructions */
 
                 /* i32.eqz */
-            case 0x45,
+            case 0x45:
                 /* i32.eq */
-                0x46,
+                break
+            case 0x46:
+                sequence = append(sequence, &I32EqExpression{})
+
                 /* i32.ne */
-                0x47,
+            case 0x47,
                 /* i32.lt_s */
                 0x48,
                 /* i32.lt_u */
@@ -1578,10 +1700,11 @@ func ReadExpressionSequence(reader *ByteReader, readingIf bool) ([]Expression, E
                 sequence = append(sequence, &I32AddExpression{})
 
                 /* i32.sub */
-            case 0x6b,
+            case 0x6b:
+                break
                 /* i32.mul */
-                0x6c:
-                    break
+            case 0x6c:
+                sequence = append(sequence, &I32MulExpression{})
                 /* i32.div_s */
             case 0x6d:
                 sequence = append(sequence, &I32DivSignedExpression{})
