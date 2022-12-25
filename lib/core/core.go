@@ -1160,6 +1160,16 @@ type Expression interface {
     ConvertToWast(Stack[int], string) string
 }
 
+type CallIndirectExpression struct {
+    Index *TypeIndex
+    Table *TableIndex
+}
+
+func (call *CallIndirectExpression) ConvertToWast(labels Stack[int], indents string) string {
+    /* FIXME: what to do with the Table field? */
+    return fmt.Sprintf("call_indirect (type %v)", call.Index.Id)
+}
+
 type CallExpression struct {
     Index *FunctionIndex
 }
@@ -1454,12 +1464,17 @@ func ReadExpressionSequence(reader *ByteReader, readingIf bool) ([]Expression, E
 
             /* call_indirect */
             case 0x11:
-                index, err := ReadU32(reader)
+                index, err := ReadTypeIndex(reader)
                 if err != nil {
                     return nil, 0, fmt.Errorf("Could not read type index for call_indirect instruction %v: %v", count, err)
                 }
 
-                _ = index
+                table, err := ReadTableIndex(reader)
+                if err != nil {
+                    return nil, 0, fmt.Errorf("Could not read table index for call_indirect instruction %v: %v", count, err)
+                }
+
+                sequence = append(sequence, &CallIndirectExpression{Index: index, Table: table})
 
             /* termination of a block / instruction sequence */
             case 0xb:
