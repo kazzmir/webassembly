@@ -448,6 +448,12 @@ func (section *WebAssemblyImportSection) ToInterface() WebAssemblySection {
 
 func (section *WebAssemblyImportSection) ConvertToWast(module *WebAssemblyModule, indents string) string {
     var out strings.Builder
+
+    memoryCount := 0
+    tableCount := 0
+    globalCount := 0
+    functionCount := 0
+
     for i, item := range section.Items {
         out.WriteString(indents)
         out.WriteString("(import ")
@@ -455,25 +461,29 @@ func (section *WebAssemblyImportSection) ConvertToWast(module *WebAssemblyModule
         switch item.Kind.(type) {
             case *FunctionImport:
                 func_ := item.Kind.(*FunctionImport)
-                out.WriteString(fmt.Sprintf("\"%v\" \"%v\" (func (;%v;) (type %v))", item.ModuleName, item.Name, i, func_.Index))
+                out.WriteString(fmt.Sprintf("\"%v\" \"%v\" (func (;%v;) (type %v))", item.ModuleName, item.Name, functionCount, func_.Index))
+                functionCount += 1
             case *GlobalType:
                 global := item.Kind.(*GlobalType)
-                out.WriteString(fmt.Sprintf("\"%v\" \"%v\" (global (;%v;) ", item.ModuleName, item.Name, i))
+                out.WriteString(fmt.Sprintf("\"%v\" \"%v\" (global (;%v;) ", item.ModuleName, item.Name, globalCount))
                 if global.Mutable {
                     out.WriteString(fmt.Sprintf("(mut %v)", global.ValueType.ConvertToWast(indents)))
                 } else {
                     out.WriteString(global.ValueType.ConvertToWast(indents))
                 }
+
+                globalCount += 1
             case *MemoryImportType:
                 memory := item.Kind.(*MemoryImportType)
-                out.WriteString(fmt.Sprintf("\"%v\" \"%v\" (memory (;%v;) %v", item.ModuleName, item.Name, i, memory.Limit.Minimum))
+                out.WriteString(fmt.Sprintf("\"%v\" \"%v\" (memory (;%v;) %v", item.ModuleName, item.Name, memoryCount, memory.Limit.Minimum))
                 if memory.Limit.HasMaximum {
                     out.WriteString(fmt.Sprintf(" %v", memory.Limit.Maximum))
                 }
                 out.WriteByte(')')
+                memoryCount += 1
             case *TableType:
                 table := item.Kind.(*TableType)
-                out.WriteString(fmt.Sprintf("\"%v\" \"%v\" (table (;%v;) %v ", item.ModuleName, item.Name, i, table.Limit.Minimum))
+                out.WriteString(fmt.Sprintf("\"%v\" \"%v\" (table (;%v;) %v ", item.ModuleName, item.Name, tableCount, table.Limit.Minimum))
                 if table.Limit.HasMaximum {
                     out.WriteString(fmt.Sprintf("%v ", table.Limit.Maximum))
                 }
@@ -485,8 +495,9 @@ func (section *WebAssemblyImportSection) ConvertToWast(module *WebAssemblyModule
                         out.WriteString("externref")
                 }
                 out.WriteByte(')')
+                tableCount += 1
             default:
-                out.WriteString(fmt.Sprintf("unhandled import type %+v", item.Kind))
+                out.WriteString(fmt.Sprintf("unhandled import index=%v type %+v", i, item.Kind))
         }
 
         out.WriteByte(')')
@@ -2503,7 +2514,31 @@ func (module *WebAssemblyFileModule) ReadGlobalSection(size uint32) (*WebAssembl
     return &section, nil
 }
 
+type MemoryMode interface {
+}
+
+type MemoryActiveMode struct {
+    Memory uint32
+    Offset []Expression
+}
+
+type MemoryPassiveMode struct {
+}
+
+type DataSegment struct {
+    Data []byte
+    Mode MemoryMode
+}
+
 type WebAssemblyDataSection struct {
+    Segments []DataSegment
+}
+
+func (section *WebAssemblyDataSection) AddData(data []byte, mode MemoryMode){
+    section.Segments = append(section.Segments, DataSegment{
+        Data: data,
+        Mode: mode,
+    })
 }
 
 func (section *WebAssemblyDataSection) ToInterface() WebAssemblySection {
@@ -2515,11 +2550,57 @@ func (section *WebAssemblyDataSection) ToInterface() WebAssemblySection {
 }
 
 func (section *WebAssemblyDataSection) ConvertToWast(module *WebAssemblyModule, indents string) string {
-    return "(data)"
+    var out strings.Builder
+
+    for i, item := range section.Segments {
+        out.WriteString(indents)
+        out.WriteString(fmt.Sprintf("(data (;%v;) ", i))
+
+        switch item.Mode.(type) {
+            case *MemoryActiveMode:
+                active := item.Mode.(*MemoryActiveMode)
+                out.WriteByte('(')
+                for e, expr := range active.Offset {
+                    var label Stack[int]
+                    out.WriteString(expr.ConvertToWast(label, ""))
+                    if e < len(active.Offset) - 1 {
+                        out.WriteByte(' ')
+                    }
+                }
+                out.WriteByte(')')
+        }
+
+        out.WriteByte(' ')
+        out.WriteByte('"')
+        out.Write(item.Data)
+        out.WriteByte('"')
+
+        out.WriteByte(')')
+        if i < len(section.Segments) - 1 {
+            out.WriteByte('\n')
+        }
+    }
+
+    return out.String()
 }
 
 func (section *WebAssemblyDataSection) String() string {
     return "data section"
+}
+
+func ReadByteVector(reader *ByteReader) ([]byte, error) {
+    bytes, err := ReadU32(reader)
+    if err != nil {
+        return nil, fmt.Errorf("Could not read vector size: %v", err)
+    }
+
+    vector := make([]byte, bytes)
+    _, err = io.ReadFull(reader, vector)
+    if err != nil {
+        return nil, fmt.Errorf("Could not read %v bytes of vector: %v", bytes, err)
+    }
+
+    return vector, nil
 }
 
 func (module *WebAssemblyFileModule) ReadDataSection(size uint32) (*WebAssemblyDataSection, error) {
@@ -2537,30 +2618,72 @@ func (module *WebAssemblyFileModule) ReadDataSection(size uint32) (*WebAssemblyD
 
     var i uint32
     for i = 0; i < datas; i++ {
-        memoryIndex, err := ReadMemoryIndex(sectionReader)
+        kind, err := ReadU32(sectionReader)
         if err != nil {
             return nil, fmt.Errorf("Could not read memory index for data entry %v: %v", i, err)
         }
 
-        expressions, _, err := ReadExpressionSequence(sectionReader, false)
-        if err != nil {
-            return nil, fmt.Errorf("Could not read expressions for data entry %v: %v", i, err)
-        }
+        switch kind {
+            /* active memory=0, offset=e */
+            case 0:
+                expressions, _, err := ReadExpressionSequence(sectionReader, false)
+                if err != nil {
+                    return nil, fmt.Errorf("Could not read expressions for data entry %v: %v", i, err)
+                }
 
-        bytes, err := ReadU32(sectionReader)
-        if err != nil {
-            return nil, fmt.Errorf("Could not read init vector for data entry %v: %v", i, err)
-        }
+                data, err := ReadByteVector(sectionReader)
+                if err != nil {
+                    return nil, fmt.Errorf("Could not read init vector for data entry %v: %v", i, err)
+                }
 
-        initVector := make([]byte, bytes)
-        _, err = io.ReadFull(sectionReader, initVector)
-        if err != nil {
-            return nil, fmt.Errorf("Could not read %v bytes of init vector for data entry %v: %v", bytes, i, err)
-        }
+                if module.debug {
+                    log.Printf("Data entry %v: kind=%v expressions=%v init-vector=%v\n", i, kind, expressions, data)
+                }
 
-        if module.debug {
-            log.Printf("Data entry %v: index=%v expressions=%v init-vector=%v\n", i, memoryIndex, expressions, initVector)
+                section.AddData(data, &MemoryActiveMode{
+                    Memory: 0,
+                    Offset: expressions,
+                })
+
+            /* passive */
+            case 1:
+                data, err := ReadByteVector(sectionReader)
+                if err != nil {
+                    return nil, fmt.Errorf("Could not read init vector for data entry %v: %v", i, err)
+                }
+                section.AddData(data, &MemoryPassiveMode{})
+
+            /* active memory=x, offset=e */
+            case 2:
+                memoryIndex, err := ReadMemoryIndex(sectionReader)
+                if err != nil {
+                    return nil, fmt.Errorf("Could not read memory index for data entry %v: %v", i, err)
+                }
+
+                expressions, _, err := ReadExpressionSequence(sectionReader, false)
+                if err != nil {
+                    return nil, fmt.Errorf("Could not read expressions for data entry %v: %v", i, err)
+                }
+
+                data, err := ReadByteVector(sectionReader)
+                if err != nil {
+                    return nil, fmt.Errorf("Could not read init vector for data entry %v: %v", i, err)
+                }
+
+                section.AddData(data, &MemoryActiveMode{
+                    Memory: memoryIndex.Id,
+                    Offset: expressions,
+                })
+
+            default:
+                return nil, fmt.Errorf("invalid data component with value %v", kind)
+
         }
+    }
+
+    _, err = sectionReader.ReadByte()
+    if err == nil {
+        return nil, fmt.Errorf("Error reading data section: not all bytes were read")
     }
 
     return &section, nil
