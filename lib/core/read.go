@@ -7,6 +7,35 @@ import (
     "encoding/binary"
 )
 
+type ByteReader struct {
+    io.ByteReader
+    Reader io.Reader
+}
+
+func (reader *ByteReader) Read(data []byte) (int, error) {
+    return reader.Reader.Read(data)
+}
+
+func (reader *ByteReader) ReadByte() (byte, error) {
+    out := make([]byte, 1)
+    count, err := reader.Reader.Read(out)
+    if err != nil {
+        return 0, err
+    }
+
+    if count == 1 {
+        return out[0], nil
+    }
+
+    return 0, fmt.Errorf("Did not read a byte")
+}
+
+func NewByteReader(reader io.Reader) *ByteReader {
+    return &ByteReader{
+        Reader: reader,
+    }
+}
+
 func ReadU32(reader io.ByteReader) (uint32, error) {
     var result uint32
     var shift uint32
