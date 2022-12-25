@@ -7,7 +7,9 @@ import (
 
 type WebAssemblySection interface {
     String() string
-    ConvertToWast(module *WebAssemblyModule, indents string) string
+    // convert to the .wat text file format
+    // https://webassembly.github.io/spec/core/text/index.html
+    ConvertToWat(module *WebAssemblyModule, indents string) string
     ToInterface() WebAssemblySection
 }
 
@@ -26,7 +28,7 @@ func (section *WebAssemblyStartSection) String() string {
     return "start section"
 }
 
-func (section *WebAssemblyStartSection) ConvertToWast(module *WebAssemblyModule, indents string) string {
+func (section *WebAssemblyStartSection) ConvertToWat(module *WebAssemblyModule, indents string) string {
     return fmt.Sprintf("(start %v)", section.Start.Id)
 }
 
@@ -65,7 +67,7 @@ func (section *WebAssemblyDataSection) ToInterface() WebAssemblySection {
     return section
 }
 
-func (section *WebAssemblyDataSection) ConvertToWast(module *WebAssemblyModule, indents string) string {
+func (section *WebAssemblyDataSection) ConvertToWat(module *WebAssemblyModule, indents string) string {
     var out strings.Builder
 
     for i, item := range section.Segments {
@@ -78,7 +80,7 @@ func (section *WebAssemblyDataSection) ConvertToWast(module *WebAssemblyModule, 
                 out.WriteByte('(')
                 for e, expr := range active.Offset {
                     var label Stack[int]
-                    out.WriteString(expr.ConvertToWast(label, ""))
+                    out.WriteString(expr.ConvertToWat(label, ""))
                     if e < len(active.Offset) - 1 {
                         out.WriteByte(' ')
                     }
@@ -124,7 +126,7 @@ func (section *WebAssemblyGlobalSection) ToInterface() WebAssemblySection {
     return section
 }
 
-func (section *WebAssemblyGlobalSection) ConvertToWast(module *WebAssemblyModule, indents string) string {
+func (section *WebAssemblyGlobalSection) ConvertToWat(module *WebAssemblyModule, indents string) string {
     var out strings.Builder
     for i, global := range section.Globals {
         out.WriteString(indents)
@@ -153,7 +155,7 @@ func (section *WebAssemblyMemorySection) ToInterface() WebAssemblySection {
     return section
 }
 
-func (section *WebAssemblyMemorySection) ConvertToWast(module *WebAssemblyModule, indents string) string {
+func (section *WebAssemblyMemorySection) ConvertToWat(module *WebAssemblyModule, indents string) string {
     return "(memory)"
 }
 
@@ -171,7 +173,7 @@ func (section *WebAssemblyCustomSection) ToInterface() WebAssemblySection {
     return section
 }
 
-func (section *WebAssemblyCustomSection) ConvertToWast(module *WebAssemblyModule, indents string) string {
+func (section *WebAssemblyCustomSection) ConvertToWat(module *WebAssemblyModule, indents string) string {
     return "(custom)"
 }
 
@@ -222,7 +224,7 @@ func (section *WebAssemblyElementSection) AddFunctionRefInit(functions []*Functi
     })
 }
 
-func (section *WebAssemblyElementSection) ConvertToWast(module *WebAssemblyModule, indents string) string {
+func (section *WebAssemblyElementSection) ConvertToWat(module *WebAssemblyModule, indents string) string {
     var out strings.Builder
     for i, element := range section.Elements {
         out.WriteString(indents)
@@ -233,7 +235,7 @@ func (section *WebAssemblyElementSection) ConvertToWast(module *WebAssemblyModul
             out.WriteString("(")
             var labels Stack[int]
             for _, expr := range active.Offset {
-                out.WriteString(expr.ConvertToWast(labels, indents))
+                out.WriteString(expr.ConvertToWat(labels, indents))
             }
             out.WriteString(") ")
         }
@@ -311,7 +313,7 @@ func (section *WebAssemblyTableSection) ToInterface() WebAssemblySection {
     return section
 }
 
-func (section *WebAssemblyTableSection) ConvertToWast(module *WebAssemblyModule, indents string) string {
+func (section *WebAssemblyTableSection) ConvertToWat(module *WebAssemblyModule, indents string) string {
     var out strings.Builder
 
     for i, item := range section.Items {
@@ -359,7 +361,7 @@ func (section *WebAssemblyCodeSection) AddCode(code Code){
     section.Code = append(section.Code, code)
 }
 
-func (section *WebAssemblyCodeSection) ConvertToWast(module *WebAssemblyModule, indents string) string {
+func (section *WebAssemblyCodeSection) ConvertToWat(module *WebAssemblyModule, indents string) string {
     var out strings.Builder
     startIndex := module.GetImportFunctionCount()
     for i, code := range section.Code {
@@ -376,7 +378,7 @@ func (section *WebAssemblyCodeSection) ConvertToWast(module *WebAssemblyModule, 
                 out.WriteString(" (param")
                 for _, input := range function.InputTypes {
                     out.WriteByte(' ')
-                    out.WriteString(input.ConvertToWast(""))
+                    out.WriteString(input.ConvertToWat(""))
                 }
                 out.WriteByte(')')
             }
@@ -386,14 +388,14 @@ func (section *WebAssemblyCodeSection) ConvertToWast(module *WebAssemblyModule, 
                 out.WriteString(" (result")
                 for _, output := range function.OutputTypes {
                     out.WriteByte(' ')
-                    out.WriteString(output.ConvertToWast(""))
+                    out.WriteString(output.ConvertToWat(""))
                 }
                 out.WriteString(")")
             }
 
             out.WriteByte('\n')
         }
-        out.WriteString(code.ConvertToWast(indents + "  "))
+        out.WriteString(code.ConvertToWat(indents + "  "))
         out.WriteString(")\n")
     }
     return out.String()
@@ -426,7 +428,7 @@ func (section *WebAssemblyExportSection) ToInterface() WebAssemblySection {
     return section
 }
 
-func (section *WebAssemblyExportSection) ConvertToWast(module *WebAssemblyModule, indents string) string {
+func (section *WebAssemblyExportSection) ConvertToWat(module *WebAssemblyModule, indents string) string {
     var out strings.Builder
 
     for i, item := range section.Items {
@@ -486,7 +488,7 @@ func (section *WebAssemblyFunctionSection) ToInterface() WebAssemblySection {
     return section
 }
 
-func (section *WebAssemblyFunctionSection) ConvertToWast(module *WebAssemblyModule, indents string) string {
+func (section *WebAssemblyFunctionSection) ConvertToWat(module *WebAssemblyModule, indents string) string {
     return ""
     // return indents + "(function)"
 }
@@ -525,7 +527,7 @@ func (section *WebAssemblyImportSection) ToInterface() WebAssemblySection {
     return section
 }
 
-func (section *WebAssemblyImportSection) ConvertToWast(module *WebAssemblyModule, indents string) string {
+func (section *WebAssemblyImportSection) ConvertToWat(module *WebAssemblyModule, indents string) string {
     var out strings.Builder
 
     memoryCount := 0
@@ -546,9 +548,9 @@ func (section *WebAssemblyImportSection) ConvertToWast(module *WebAssemblyModule
                 global := item.Kind.(*GlobalType)
                 out.WriteString(fmt.Sprintf("\"%v\" \"%v\" (global (;%v;) ", item.ModuleName, item.Name, globalCount))
                 if global.Mutable {
-                    out.WriteString(fmt.Sprintf("(mut %v)", global.ValueType.ConvertToWast(indents)))
+                    out.WriteString(fmt.Sprintf("(mut %v)", global.ValueType.ConvertToWat(indents)))
                 } else {
-                    out.WriteString(global.ValueType.ConvertToWast(indents))
+                    out.WriteString(global.ValueType.ConvertToWat(indents))
                 }
 
                 globalCount += 1
@@ -623,7 +625,7 @@ func (section *WebAssemblyTypeSection) AddFunctionType(function WebAssemblyFunct
     section.Functions = append(section.Functions, function)
 }
 
-func (section *WebAssemblyTypeSection) ConvertToWast(module *WebAssemblyModule, indents string) string {
+func (section *WebAssemblyTypeSection) ConvertToWat(module *WebAssemblyModule, indents string) string {
     var out strings.Builder
     for i, function := range section.Functions {
         out.WriteString(indents)
@@ -635,7 +637,7 @@ func (section *WebAssemblyTypeSection) ConvertToWast(module *WebAssemblyModule, 
             out.WriteString(" (param")
             for _, input := range function.InputTypes {
                 out.WriteByte(' ')
-                out.WriteString(input.ConvertToWast(""))
+                out.WriteString(input.ConvertToWat(""))
             }
             out.WriteByte(')')
         }
@@ -644,7 +646,7 @@ func (section *WebAssemblyTypeSection) ConvertToWast(module *WebAssemblyModule, 
             out.WriteString(" (result")
             for _, output := range function.OutputTypes {
                 out.WriteByte(' ')
-                out.WriteString(output.ConvertToWast(""))
+                out.WriteString(output.ConvertToWat(""))
             }
             out.WriteString(")")
         }
@@ -703,12 +705,12 @@ func (module *WebAssemblyModule) AddSection(section WebAssemblySection) {
     module.Sections = append(module.Sections, section)
 }
 
-func (module *WebAssemblyModule) ConvertToWast(indents string) string {
+func (module *WebAssemblyModule) ConvertToWat(indents string) string {
     var out strings.Builder
 
     out.WriteString("(module\n")
     for _, section := range module.Sections {
-        out.WriteString(section.ConvertToWast(module, "  "))
+        out.WriteString(section.ConvertToWat(module, "  "))
         out.WriteString("\n")
     }
     out.WriteString(")")

@@ -93,7 +93,7 @@ const (
     ValueTypeF64 ValueType = 0x7c
 )
 
-func (value *ValueType) ConvertToWast(indents string) string {
+func (value *ValueType) ConvertToWat(indents string) string {
     switch *value {
         case InvalidValueType: return "invalid"
         case ValueTypeI32: return "i32"
@@ -1087,7 +1087,7 @@ type WebAssemblyModule struct {
 }
 */
 
-func Parse(path string, debug bool) (WebAssemblyModule, error) {
+func ParseWasmFile(path string, debug bool) (WebAssemblyModule, error) {
     module, err := WebAssemblyNew(path, debug)
     if err != nil {
         return WebAssemblyModule{}, err

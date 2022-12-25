@@ -39,7 +39,7 @@ func (stack *Stack[T]) Pop() T {
     return t
 }
 
-func (code *Code) ConvertToWast(indents string) string {
+func (code *Code) ConvertToWat(indents string) string {
     var out strings.Builder
 
     var labelStack Stack[int]
@@ -50,7 +50,7 @@ func (code *Code) ConvertToWast(indents string) string {
         for i, local := range code.Locals {
             out.WriteByte(' ')
             for x := 0; x < int(local.Count); x++ {
-                out.WriteString(local.Type.ConvertToWast(indents))
+                out.WriteString(local.Type.ConvertToWat(indents))
                 if x < int(local.Count) - 1 {
                     out.WriteByte(' ')
                 }
@@ -65,7 +65,7 @@ func (code *Code) ConvertToWast(indents string) string {
 
     for i, expression := range code.Expressions {
         out.WriteString(indents)
-        out.WriteString(expression.ConvertToWast(labelStack, indents))
+        out.WriteString(expression.ConvertToWat(labelStack, indents))
         if i < len(code.Expressions) - 1 {
             out.WriteByte('\n')
         }
@@ -83,7 +83,7 @@ func (code *Code) SetExpressions(expressions []Expression){
 }
 
 type Expression interface {
-    ConvertToWast(Stack[int], string) string
+    ConvertToWat(Stack[int], string) string
 }
 
 type CallIndirectExpression struct {
@@ -91,7 +91,7 @@ type CallIndirectExpression struct {
     Table *TableIndex
 }
 
-func (call *CallIndirectExpression) ConvertToWast(labels Stack[int], indents string) string {
+func (call *CallIndirectExpression) ConvertToWat(labels Stack[int], indents string) string {
     /* FIXME: what to do with the Table field? */
     return fmt.Sprintf("call_indirect (type %v)", call.Index.Id)
 }
@@ -100,7 +100,7 @@ type CallExpression struct {
     Index *FunctionIndex
 }
 
-func (call *CallExpression) ConvertToWast(labels Stack[int], indents string) string {
+func (call *CallExpression) ConvertToWat(labels Stack[int], indents string) string {
     return fmt.Sprintf("call %v", call.Index.Id)
 }
 
@@ -108,7 +108,7 @@ type BranchIfExpression struct {
     Label uint32
 }
 
-func (expr *BranchIfExpression) ConvertToWast(labels Stack[int], indents string) string {
+func (expr *BranchIfExpression) ConvertToWat(labels Stack[int], indents string) string {
     return fmt.Sprintf("br_if %v (;@%v;)", expr.Label, labels.Get(expr.Label))
 }
 
@@ -116,7 +116,7 @@ type BranchExpression struct {
     Label uint32
 }
 
-func (expr *BranchExpression) ConvertToWast(labels Stack[int], indents string) string {
+func (expr *BranchExpression) ConvertToWat(labels Stack[int], indents string) string {
     return fmt.Sprintf("br %v (;@%v;)", expr.Label, labels.Get(expr.Label))
 }
 
@@ -124,7 +124,7 @@ type RefFuncExpression struct {
     Function *FunctionIndex
 }
 
-func (expr *RefFuncExpression) ConvertToWast(labels Stack[int], indents string) string {
+func (expr *RefFuncExpression) ConvertToWat(labels Stack[int], indents string) string {
     return fmt.Sprintf("ref.func %v", expr.Function.Id)
 }
 
@@ -132,14 +132,14 @@ type I32ConstExpression struct {
     N int32
 }
 
-func (expr *I32ConstExpression) ConvertToWast(labels Stack[int], indents string) string {
+func (expr *I32ConstExpression) ConvertToWat(labels Stack[int], indents string) string {
     return fmt.Sprintf("i32.const %v", expr.N)
 }
 
 type I32AddExpression struct {
 }
 
-func (expr *I32AddExpression) ConvertToWast(labels Stack[int], indents string) string {
+func (expr *I32AddExpression) ConvertToWat(labels Stack[int], indents string) string {
     return "i32.add"
 }
 
@@ -147,28 +147,28 @@ type I32LoadExpression struct {
     Memory MemoryArgument
 }
 
-func (expr *I32LoadExpression) ConvertToWast(labels Stack[int], indents string) string {
+func (expr *I32LoadExpression) ConvertToWat(labels Stack[int], indents string) string {
     return "i32.load"
 }
 
 type I32EqExpression struct {
 }
 
-func (expr *I32EqExpression) ConvertToWast(labels Stack[int], indents string) string {
+func (expr *I32EqExpression) ConvertToWat(labels Stack[int], indents string) string {
     return "i32.eq"
 }
 
 type I32DivSignedExpression struct {
 }
 
-func (expr *I32DivSignedExpression) ConvertToWast(labels Stack[int], indents string) string {
+func (expr *I32DivSignedExpression) ConvertToWat(labels Stack[int], indents string) string {
     return "i32.div_s"
 }
 
 type I32MulExpression struct {
 }
 
-func (expr *I32MulExpression) ConvertToWast(labels Stack[int], indents string) string {
+func (expr *I32MulExpression) ConvertToWat(labels Stack[int], indents string) string {
     return "i32.mul"
 }
 
@@ -176,7 +176,7 @@ type LocalGetExpression struct {
     Local uint32
 }
 
-func (expr *LocalGetExpression) ConvertToWast(labels Stack[int], indents string) string {
+func (expr *LocalGetExpression) ConvertToWat(labels Stack[int], indents string) string {
     return fmt.Sprintf("local.get %v", expr.Local)
 }
 
@@ -184,7 +184,7 @@ type LocalSetExpression struct {
     Local uint32
 }
 
-func (expr *LocalSetExpression) ConvertToWast(labels Stack[int], indents string) string {
+func (expr *LocalSetExpression) ConvertToWat(labels Stack[int], indents string) string {
     return fmt.Sprintf("local.set %v", expr.Local)
 }
 
@@ -192,7 +192,7 @@ type GlobalGetExpression struct {
     Global *GlobalIndex
 }
 
-func (expr *GlobalGetExpression) ConvertToWast(labels Stack[int], indents string) string {
+func (expr *GlobalGetExpression) ConvertToWat(labels Stack[int], indents string) string {
     return fmt.Sprintf("global.get %v", expr.Global.Id)
 }
 
@@ -200,7 +200,7 @@ type GlobalSetExpression struct {
     Global *GlobalIndex
 }
 
-func (expr *GlobalSetExpression) ConvertToWast(labels Stack[int], indents string) string {
+func (expr *GlobalSetExpression) ConvertToWat(labels Stack[int], indents string) string {
     return fmt.Sprintf("global.set %v", expr.Global.Id)
 }
 
@@ -217,7 +217,7 @@ type BlockExpression struct {
     Kind BlockKind
 }
 
-func (block *BlockExpression) ConvertToWast(labels Stack[int], indents string) string {
+func (block *BlockExpression) ConvertToWat(labels Stack[int], indents string) string {
     labels.Push(labels.Size()+1)
     defer labels.Pop()
 
@@ -236,7 +236,7 @@ func (block *BlockExpression) ConvertToWast(labels Stack[int], indents string) s
 
     for _, expression := range block.Instructions {
         out.WriteString(indents + "  ")
-        out.WriteString(expression.ConvertToWast(labels, indents + "  "))
+        out.WriteString(expression.ConvertToWat(labels, indents + "  "))
         out.WriteByte('\n')
     }
     out.WriteString(indents)

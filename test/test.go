@@ -18,12 +18,12 @@ func compareSExpression(s1 sexp.SExpression, s2 sexp.SExpression) bool {
 }
 
 func compare(wasmPath string, expectedWatPath string) error {
-    module, err := core.Parse(wasmPath, false)
+    module, err := core.ParseWasmFile(wasmPath, false)
     if err != nil {
         return err
     }
 
-    output := module.ConvertToWast("")
+    output := module.ConvertToWat("")
 
     // fmt.Printf("Output: %v\n", output)
 
