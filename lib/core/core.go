@@ -471,6 +471,20 @@ func (section *WebAssemblyImportSection) ConvertToWast(module *WebAssemblyModule
                     out.WriteString(fmt.Sprintf(" %v", memory.Limit.Maximum))
                 }
                 out.WriteByte(')')
+            case *TableType:
+                table := item.Kind.(*TableType)
+                out.WriteString(fmt.Sprintf("\"%v\" \"%v\" (table (;%v;) %v ", item.ModuleName, item.Name, i, table.Limit.Minimum))
+                if table.Limit.HasMaximum {
+                    out.WriteString(fmt.Sprintf("%v ", table.Limit.Maximum))
+                }
+
+                switch table.RefType {
+                    case RefTypeFunction:
+                        out.WriteString("funcref")
+                    case RefTypeExtern:
+                        out.WriteString("externref")
+                }
+                out.WriteByte(')')
             default:
                 out.WriteString(fmt.Sprintf("unhandled import type %+v", item.Kind))
         }
@@ -710,7 +724,7 @@ func ReadImportDescription(reader *ByteReader) (Index, error) {
 
     switch kind {
         case byte(FunctionImportDescription): return ReadFunctionImport(reader)
-        case byte(TableImportDescription): return ReadTableIndex(reader)
+        case byte(TableImportDescription): return ReadTableType(reader)
         case byte(MemoryImportDescription): return ReadMemoryType(reader)
         case byte(GlobalImportDescription): return ReadGlobalType(reader)
     }
@@ -2020,12 +2034,37 @@ type TableType struct {
     RefType byte
 }
 
+func (table *TableType) String() string {
+    return fmt.Sprintf("reftype=%v min=%v max=%v", table.RefType, table.Limit.Minimum, table.Limit.Maximum)
+}
+
+func ReadTableType(reader *ByteReader) (*TableType, error) {
+    refType, err := reader.ReadByte()
+    if err != nil {
+        return nil, fmt.Errorf("Could not read table type: %v", err)
+    }
+
+    if refType != RefTypeFunction && refType != RefTypeExtern {
+        return nil, fmt.Errorf("Unexpected table ref type %v", refType)
+    }
+
+    limit, err := ReadLimit(reader)
+    if err != nil {
+        return nil, fmt.Errorf("Could not read limit for table type: %v", err)
+    }
+
+    return &TableType{
+        Limit: limit,
+        RefType: refType,
+    }, nil
+}
+
 type WebAssemblyTableSection struct {
     Items []TableType
 }
 
-func (section *WebAssemblyTableSection) AddTable(limit Limit, refType byte){
-    section.Items = append(section.Items, TableType{Limit: limit, RefType: refType})
+func (section *WebAssemblyTableSection) AddTable(table TableType){
+    section.Items = append(section.Items, table)
 }
 
 func (section *WebAssemblyTableSection) ToInterface() WebAssemblySection {
@@ -2127,25 +2166,12 @@ func (module *WebAssemblyFileModule) ReadTableSection(size uint32) (*WebAssembly
 
     var i uint32
     for i = 0; i < tables; i++ {
-        refType, err := sectionReader.ReadByte()
+
+        tableType, err := ReadTableType(sectionReader)
         if err != nil {
-            return nil, fmt.Errorf("Could not read table entry %v: %v", i, err)
+            return nil, fmt.Errorf("Could not read table type in table section %v: %v", i, err)
         }
-
-        if refType != RefTypeFunction && refType != RefTypeExtern {
-            return nil, fmt.Errorf("Unexpected table ref type %v", refType)
-        }
-
-        limit, err := ReadLimit(sectionReader)
-        if err != nil {
-            return nil, fmt.Errorf("Could not read limit for table entry %v: %v", i, err)
-        }
-
-        if module.debug {
-            log.Printf("Table entry %v: limit=%v refType=%v\n", i, limit, refType)
-        }
-
-        section.AddTable(limit, refType)
+        section.AddTable(*tableType)
     }
 
     _, err = sectionReader.ReadByte()
