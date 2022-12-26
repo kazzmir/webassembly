@@ -24,6 +24,18 @@ type RuntimeValue struct {
     F64 float64
 }
 
+func (value RuntimeValue) String() string {
+    switch value.Kind {
+        case RuntimeValueNone: return "none"
+        case RuntimeValueI32: return fmt.Sprintf("%v:i32", value.I32)
+        case RuntimeValueI64: return fmt.Sprintf("%v:i64", value.I64)
+        case RuntimeValueF32: return fmt.Sprintf("%v:f32", value.F32)
+        case RuntimeValueF64: return fmt.Sprintf("%v:f64", value.F64)
+    }
+
+    return "?"
+}
+
 func Trap(reason string) error {
     return fmt.Errorf(reason)
 }
@@ -33,10 +45,23 @@ func Execute(stack *data.Stack[RuntimeValue], labels *data.Stack[int], expressio
 
     fmt.Printf("Stack is now %+v\n", *stack)
 
+    /* branches work by jumping to the Nth block, where N represents the nesting level of the blocks.
+     *   (block_a (block_b (br 0) (br 1)))
+     * Here the blocks are annotated with 'a' and 'b' to make their references more clear, but in actual
+     * syntax the _a and _b would be left off.
+     *
+     * The (br 0) would jump to the end of block_b, and the (br 1) would jump to the end of block_a. The number
+     * after the br represents how many nested blocks to jump back through.
+     *
+     * This interpreter implements branches as the second return value in (a,b,c) returning N+1 where N is the 0 in (br 0).
+     * When a block receives a non-zero value for b after executing an instruction, the block will immediately return
+     * with b-1, thus allowing the previous block to also abort early.
+     */
     switch current.(type) {
         case *core.BlockExpression:
             block := current.(*core.BlockExpression)
 
+            /* Keep track of the number of values on the stack in case they need to be popped off later */
             labels.Push(stack.Size())
             local := 0
             for local < len(block.Instructions) {
@@ -50,17 +75,17 @@ func Execute(stack *data.Stack[RuntimeValue], labels *data.Stack[int], expressio
                     fmt.Printf("Branch to %v\n", branch)
                     last := stack.Pop()
 
+                    /* Remove all values on the stack that were produced during the dynamic extent of this block
+                     */
                     size := labels.Pop()
-                    for stack.Size() > size {
-                        stack.Pop()
-                    }
-
+                    stack.Reduce(size)
                     stack.Push(last)
 
                     return instruction+1, branch-1, nil
                 }
             }
             labels.Pop()
+
         case *core.I32ConstExpression:
             expr := current.(*core.I32ConstExpression)
             stack.Push(RuntimeValue{

@@ -16,6 +16,18 @@ func (stack *Stack[T]) Push(value T){
     stack.Values = append(stack.Values, value)
 }
 
+func min(a, b int) int {
+    if a < b {
+        return a
+    }
+    return b
+}
+
+/* chop off the last couple of elements such that the stack has `size' elements in it */
+func (stack *Stack[T]) Reduce(size int){
+    stack.Values = stack.Values[0:min(size, len(stack.Values))]
+}
+
 func (stack *Stack[T]) Pop() T {
     if len(stack.Values) == 0 {
         var x T
