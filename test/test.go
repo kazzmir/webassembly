@@ -81,35 +81,6 @@ func runWasmToWatTests(){
     }
 }
 
-func cleanName(name string) string {
-    return strings.Trim(name, "\"")
-}
-
-func doAssertReturn(module core.WebAssemblyModule, assert sexp.SExpression) error {
-    what := assert.Children[0]
-    if what.Name == "invoke" {
-        // FIXME: add args
-        result, err := exec.Invoke(module, cleanName(what.Children[0].Value))
-        if err != nil {
-            return err
-        }
-
-        if len(assert.Children) == 2 {
-            expressions := core.MakeExpressions(assert.Children[1])
-            expected, err := exec.EvaluateOne(expressions[0])
-            if err != nil {
-                return err
-            } else {
-                if result != expected {
-                    return fmt.Errorf("result=%v expected=%v", result, expected)
-                }
-            }
-        }
-    }
-
-    return nil
-}
-
 func runWastFile(path string) error {
     wast, err := core.ParseWastFile(path)
     if err != nil {
@@ -123,7 +94,7 @@ func runWastFile(path string) error {
 
     for _, command := range wast.Expressions {
         if command.Name == "assert_return" {
-            err = doAssertReturn(module, command)
+            err = exec.AssertReturn(module, command)
             if err != nil {
                 return err
             }

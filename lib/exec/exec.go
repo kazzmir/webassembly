@@ -2,8 +2,10 @@ package exec
 
 import (
     "fmt"
+    "strings"
     "github.com/kazzmir/webassembly/lib/core"
     "github.com/kazzmir/webassembly/lib/data"
+    "github.com/kazzmir/webassembly/lib/sexp"
 )
 
 type RuntimeValueKind int
@@ -37,15 +39,21 @@ func (value RuntimeValue) String() string {
     return "?"
 }
 
+/* activation frame: https://webassembly.github.io/spec/core/exec/runtime.html#syntax-frame */
+type Frame struct {
+    Locals []RuntimeValue
+    Module core.WebAssemblyModule
+}
+
 func Trap(reason string) error {
     return fmt.Errorf(reason)
 }
 
 /* execute a single instruction
- *  input: stack of runtime values, stack of block labels, list of expressions to execute, instruction index into 'expressions'
+ *  input: stack of runtime values, stack of block labels, list of expressions to execute, instruction index into 'expressions', activation frame
  *  output: next instruction number to execute, number of blocks to skip (if greater than 0), and any errors that may occur (including traps)
  */
-func Execute(stack *data.Stack[RuntimeValue], labels *data.Stack[int], expressions []core.Expression, instruction int) (int, int, error) {
+func Execute(stack *data.Stack[RuntimeValue], labels *data.Stack[int], expressions []core.Expression, instruction int, frame Frame) (int, int, error) {
     current := expressions[instruction]
 
     fmt.Printf("Stack is now %+v\n", *stack)
@@ -72,7 +80,7 @@ func Execute(stack *data.Stack[RuntimeValue], labels *data.Stack[int], expressio
             for local < len(block.Instructions) {
                 var branch int
                 var err error
-                local, branch, err = Execute(stack, labels, block.Instructions, local)
+                local, branch, err = Execute(stack, labels, block.Instructions, local, frame)
                 if err != nil {
                     return 0, 0, err
                 }
@@ -134,6 +142,9 @@ func Execute(stack *data.Stack[RuntimeValue], labels *data.Stack[int], expressio
             } else {
                 return 0, int(expr.Label)+1, nil
             }
+        case *core.LocalGetExpression:
+            expr := current.(*core.LocalGetExpression)
+            stack.Push(frame.Locals[expr.Local])
         default:
             return 0, 0, fmt.Errorf("unhandled instruction %+v", current)
     }
@@ -146,7 +157,7 @@ func EvaluateOne(expression core.Expression) (RuntimeValue, error) {
     var stack data.Stack[RuntimeValue]
     var labels data.Stack[int]
 
-    _, _, err := Execute(&stack, &labels, []core.Expression{expression}, 0)
+    _, _, err := Execute(&stack, &labels, []core.Expression{expression}, 0, Frame{})
     if err != nil {
         return RuntimeValue{}, err
     }
@@ -162,7 +173,7 @@ func EvaluateOne(expression core.Expression) (RuntimeValue, error) {
 /* evaluate an entire function
  * FIXME: handle arguments
  */
-func RunCode(code core.Code) (RuntimeValue, error) {
+func RunCode(code core.Code, frame Frame) (RuntimeValue, error) {
     var stack data.Stack[RuntimeValue]
     var labels data.Stack[int]
 
@@ -171,7 +182,7 @@ func RunCode(code core.Code) (RuntimeValue, error) {
     for instruction < len(code.Expressions) {
         var branch int
         var err error
-        instruction, branch, err = Execute(&stack, &labels, code.Expressions, instruction)
+        instruction, branch, err = Execute(&stack, &labels, code.Expressions, instruction, frame)
         if err != nil {
             return RuntimeValue{}, err
         }
@@ -189,7 +200,7 @@ func RunCode(code core.Code) (RuntimeValue, error) {
 }
 
 /* invoke an exported function in the given module */
-func Invoke(module core.WebAssemblyModule, name string) (RuntimeValue, error) {
+func Invoke(module core.WebAssemblyModule, name string, args []RuntimeValue) (RuntimeValue, error) {
     kind := module.GetExportSection().FindExportByName(name)
     if kind == nil {
         return RuntimeValue{}, fmt.Errorf("no such exported function '%v'", name)
@@ -198,10 +209,57 @@ func Invoke(module core.WebAssemblyModule, name string) (RuntimeValue, error) {
     function, ok := kind.(*core.FunctionIndex)
     if ok {
         code := module.GetCodeSection().GetFunction(function.Id)
-        return RunCode(code)
+        frame := Frame{
+            Locals: args,
+            Module: module,
+        }
+        return RunCode(code, frame)
     } else {
         return RuntimeValue{}, fmt.Errorf("no such exported function '%v'", name)
     }
    
     return RuntimeValue{}, fmt.Errorf("shouldnt get here")
+}
+
+func cleanName(name string) string {
+    return strings.Trim(name, "\"")
+}
+
+/* handle wast-style (assert_return ...) */
+func AssertReturn(module core.WebAssemblyModule, assert sexp.SExpression) error {
+    what := assert.Children[0]
+    if what.Name == "invoke" {
+
+        functionName := cleanName(what.Children[0].Value)
+
+        var args []RuntimeValue
+        for _, arg := range what.Children[1:] {
+            expressions := core.MakeExpressions(arg)
+            nextArg, err := EvaluateOne(expressions[0])
+            if err != nil {
+                return err
+            }
+
+            args = append(args, nextArg)
+        }
+
+        result, err := Invoke(module, functionName, args)
+        if err != nil {
+            return err
+        }
+
+        if len(assert.Children) == 2 {
+            expressions := core.MakeExpressions(assert.Children[1])
+            expected, err := EvaluateOne(expressions[0])
+            if err != nil {
+                return err
+            } else {
+                if result != expected {
+                    return fmt.Errorf("result=%v expected=%v", result, expected)
+                }
+            }
+        }
+    }
+
+    return nil
 }

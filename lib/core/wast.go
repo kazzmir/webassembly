@@ -158,6 +158,13 @@ func MakeExpressions(expr *sexp.SExpression) []Expression {
             }
 
             return []Expression{&F64NegExpression{}}
+        case "local.get":
+            index, err := strconv.Atoi(expr.Children[0].Value)
+            if err != nil {
+                return nil
+            }
+
+            return []Expression{&LocalGetExpression{Local: uint32(index)}}
 
     }
 

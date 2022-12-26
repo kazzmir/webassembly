@@ -7,39 +7,11 @@ import (
     "strings"
     "path/filepath"
     "github.com/kazzmir/webassembly/lib/core"
-    "github.com/kazzmir/webassembly/lib/sexp"
     "github.com/kazzmir/webassembly/lib/exec"
 )
 
 func cleanName(name string) string {
     return strings.Trim(name, "\"")
-}
-
-func doAssertReturn(module core.WebAssemblyModule, assert sexp.SExpression){
-    what := assert.Children[0]
-    if what.Name == "invoke" {
-        // FIXME: add args
-        result, err := exec.Invoke(module, cleanName(what.Children[0].Value))
-        if err != nil {
-            fmt.Printf("Error: %v\n", err)
-        } else {
-            fmt.Printf("Result: %v\n", result)
-        }
-
-        if len(assert.Children) == 2 {
-            expressions := core.MakeExpressions(assert.Children[1])
-            expected, err := exec.EvaluateOne(expressions[0])
-            if err != nil {
-                fmt.Printf("Error: unable to compute expected value: %v\n", err)
-            } else {
-                if result != expected {
-                    fmt.Printf("Result: %v\n", result)
-                    fmt.Printf("Expected: %v\n", expected)
-                    fmt.Printf("Error: assertion failed\n")
-                }
-            }
-        }
-    }
 }
 
 func handleWast(wast core.Wast){
@@ -53,7 +25,10 @@ func handleWast(wast core.Wast){
 
     for _, command := range wast.Expressions {
         if command.Name == "assert_return" {
-            doAssertReturn(module, command)
+            err := exec.AssertReturn(module, command)
+            if err != nil {
+                fmt.Printf("Error: %v\n", err)
+            }
         }
     }
 }
