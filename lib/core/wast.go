@@ -6,6 +6,8 @@ import (
     "io"
     "errors"
     "fmt"
+    "strconv"
+    "strings"
     "github.com/kazzmir/webassembly/lib/sexp"
 )
 
@@ -52,10 +54,102 @@ func MakeFunctionType(function *sexp.SExpression) WebAssemblyFunction {
     return out
 }
 
+func MakeExpressions(expr *sexp.SExpression) []Expression {
+    switch expr.Name {
+        case "block":
+            var children []Expression
+            for _, child := range expr.Children {
+                if child.Name == "result" {
+                    continue
+                }
+                children = append(children, MakeExpressions(child)...)
+            }
+
+            return []Expression{&BlockExpression{
+                    Instructions: children,
+                    Kind: BlockKindBlock,
+                },
+            }
+        case "br_if":
+            label, err := strconv.Atoi(expr.Children[0].Value)
+            if err != nil {
+                return nil
+            }
+
+            out := append(MakeExpressions(expr.Children[1]), MakeExpressions(expr.Children[2])...)
+
+            return append(out, &BranchIfExpression{Label: uint32(label)})
+        case "i32.const":
+            value, err := strconv.Atoi(expr.Children[0].Value)
+            if err != nil {
+                return nil
+            }
+
+            return []Expression{
+                &I32ConstExpression{
+                    N: int32(value),
+                },
+            }
+        case "i32.ctz":
+            return append(MakeExpressions(expr.Children[0]), &I32CtzExpression{})
+        case "i64.const":
+            value, err := strconv.Atoi(expr.Children[0].Value)
+            if err != nil {
+                return nil
+            }
+
+            return []Expression{
+                &I64ConstExpression{
+                    N: int32(value),
+                },
+            }
+
+        case "i64.ctz":
+            return append(MakeExpressions(expr.Children[0]), &I64CtzExpression{})
+        case "drop":
+            argument := MakeExpressions(expr.Children[0])
+            return append(argument, &DropExpression{})
+    }
+
+    fmt.Printf("Warning: unhandled expression '%v'\n", expr.Name)
+
+    return nil
+}
+
 func MakeCode(function *sexp.SExpression) Code {
     var out Code
 
+    startIndex := 1
+    for {
+        if startIndex < len(function.Children) {
+            if function.Children[startIndex].Name == "param" || function.Children[startIndex].Name == "result" {
+                startIndex += 1
+            } else {
+                break
+            }
+        } else {
+            break
+        }
+    }
+
+    for startIndex := startIndex; startIndex < len(function.Children); startIndex++ {
+        current := function.Children[startIndex]
+        if current.Name == "local" {
+            out.Locals = append(out.Locals, Local{
+                Count: 1,
+                Type: ValueTypeFromName(current.Children[0].Value),
+            })
+        } else {
+            expressions := MakeExpressions(current)
+            out.Expressions = append(out.Expressions, expressions...)
+        }
+    }
+
     return out
+}
+
+func cleanName(name string) string {
+    return strings.Trim(name, "\"")
 }
 
 func (wast *Wast) CreateWasmModule() (WebAssemblyModule, error) {
@@ -75,14 +169,11 @@ func (wast *Wast) CreateWasmModule() (WebAssemblyModule, error) {
     moduleOut.AddSection(exportSection)
 
     for _, expr := range wast.Module.Children {
+        /*
         if expr.Name == "func" {
             fmt.Printf("Func: %v\n", expr)
         }
-
-        // (func $dummy), whats the point?
-        if len(expr.Children) == 1 {
-            continue
-        }
+        */
 
         name := expr.Children[0]
         if name.Name == "export" {
@@ -102,7 +193,17 @@ func (wast *Wast) CreateWasmModule() (WebAssemblyModule, error) {
 
             codeSection.AddCode(code)
 
-            exportSection.AddExport(functionName.Value, &FunctionIndex{Id: functionIndex})
+            exportSection.AddExport(cleanName(functionName.Value), &FunctionIndex{Id: functionIndex})
+        } else {
+            functionType := MakeFunctionType(expr)
+            typeIndex := typeSection.GetOrCreateFunctionType(functionType)
+
+            _ = functionSection.AddFunction(&TypeIndex{
+                Id: typeIndex,
+            })
+
+            var code Code
+            codeSection.AddCode(code)
         }
     }
 

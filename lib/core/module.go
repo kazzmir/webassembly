@@ -392,10 +392,11 @@ func (section *WebAssemblyCodeSection) ConvertToWat(module *WebAssemblyModule, i
                 }
                 out.WriteString(")")
             }
-
-            out.WriteByte('\n')
         }
-        out.WriteString(code.ConvertToWat(indents + "  "))
+        if len(code.Expressions) > 0 {
+            out.WriteByte('\n')
+            out.WriteString(code.ConvertToWat(indents + "  "))
+        }
         out.WriteString(")\n")
     }
     return out.String()

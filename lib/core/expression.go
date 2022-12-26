@@ -136,6 +136,14 @@ func (expr *I32ConstExpression) ConvertToWat(labels Stack[int], indents string) 
     return fmt.Sprintf("i32.const %v", expr.N)
 }
 
+type I64ConstExpression struct {
+    N int32
+}
+
+func (expr *I64ConstExpression) ConvertToWat(labels Stack[int], indents string) string {
+    return fmt.Sprintf("i64.const %v", expr.N)
+}
+
 type I32AddExpression struct {
 }
 
@@ -178,6 +186,27 @@ type LocalGetExpression struct {
 
 func (expr *LocalGetExpression) ConvertToWat(labels Stack[int], indents string) string {
     return fmt.Sprintf("local.get %v", expr.Local)
+}
+
+type DropExpression struct {
+}
+
+func (expr *DropExpression) ConvertToWat(labels Stack[int], indents string) string {
+    return "drop"
+}
+
+type I32CtzExpression struct {
+}
+
+func (expr *I32CtzExpression) ConvertToWat(labels Stack[int], indents string) string {
+    return "i32.ctz"
+}
+
+type I64CtzExpression struct {
+}
+
+func (expr *I64CtzExpression) ConvertToWat(labels Stack[int], indents string) string {
+    return "i64.ctz"
 }
 
 type LocalSetExpression struct {
