@@ -8,6 +8,7 @@ import (
     "path/filepath"
     "github.com/kazzmir/webassembly/lib/core"
     "github.com/kazzmir/webassembly/lib/sexp"
+    "github.com/kazzmir/webassembly/lib/exec"
 )
 
 func compareSExpression(s1 sexp.SExpression, s2 sexp.SExpression) bool {
@@ -56,7 +57,8 @@ func ReplaceExtension(path string, newExt string) string {
     return base + newExt
 }
 
-func checkAllTestFiles(){
+func runWasmToWatTests(){
+    fmt.Printf("* .wasm -> .wat tests:\n")
     paths, err := os.ReadDir("test-files")
     if err != nil {
         fmt.Printf("Error: could not read test-files directory: %v\n", err)
@@ -79,6 +81,86 @@ func checkAllTestFiles(){
     }
 }
 
+func cleanName(name string) string {
+    return strings.Trim(name, "\"")
+}
+
+func doAssertReturn(module core.WebAssemblyModule, assert sexp.SExpression) error {
+    what := assert.Children[0]
+    if what.Name == "invoke" {
+        // FIXME: add args
+        result, err := exec.Invoke(module, cleanName(what.Children[0].Value))
+        if err != nil {
+            return err
+        }
+
+        if len(assert.Children) == 2 {
+            expressions := core.MakeExpressions(assert.Children[1])
+            expected, err := exec.EvaluateOne(expressions[0])
+            if err != nil {
+                return err
+            } else {
+                if result != expected {
+                    return fmt.Errorf("result=%v expected=%v", result, expected)
+                }
+            }
+        }
+    }
+
+    return nil
+}
+
+func runWastFile(path string) error {
+    wast, err := core.ParseWastFile(path)
+    if err != nil {
+        return err
+    }
+
+    module, err := wast.CreateWasmModule()
+    if err != nil {
+        return fmt.Errorf("Could not create wasm module: %v", err)
+    }
+
+    for _, command := range wast.Expressions {
+        if command.Name == "assert_return" {
+            err = doAssertReturn(module, command)
+            if err != nil {
+                return err
+            }
+        }
+    }
+
+    return nil
+}
+
+func runWastExecTests(){
+    fmt.Printf("* Run .wast files:\n")
+    paths, err := os.ReadDir("test-files/wast/")
+    if err != nil {
+        fmt.Printf("Error: could not read test-files directory: %v\n", err)
+        return
+    }
+
+    for _, path := range paths {
+        name := path.Name()
+        if !path.IsDir() && strings.HasSuffix(name, ".wast"){
+            fullPath := filepath.Join("test-files/wast", name)
+
+            err := runWastFile(fullPath)
+            if err != nil {
+                fmt.Printf("Failure: %v: %v\n", name, err)
+            } else {
+                fmt.Printf("Success: %v\n", name)
+            }
+        }
+    }
+}
+
+func runTests(){
+    runWasmToWatTests()
+    runWastExecTests()
+}
+
 func main() {
-    checkAllTestFiles()
+    runTests()
 }
