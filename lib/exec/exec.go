@@ -50,6 +50,9 @@ func Trap(reason string) error {
     return fmt.Errorf(reason)
 }
 
+// magic value meaning we are returning from the function rather than just exiting a block
+const ReturnLabel int = 1<<30
+
 /* execute a single instruction
  *  input: stack of runtime values, stack of block labels, list of expressions to execute, instruction index into 'expressions', activation frame
  *  output: next instruction number to execute, number of blocks to skip (if greater than 0), and any errors that may occur (including traps)
@@ -57,7 +60,7 @@ func Trap(reason string) error {
 func Execute(stack *data.Stack[RuntimeValue], labels *data.Stack[int], expressions []core.Expression, instruction int, frame Frame) (int, int, error) {
     current := expressions[instruction]
 
-    fmt.Printf("Stack is now %+v\n", *stack)
+    // fmt.Printf("Stack is now %+v\n", *stack)
 
     /* branches work by jumping to the Nth block, where N represents the nesting level of the blocks.
      *   (block_a (block_b (br 0) (br 1)))
@@ -85,8 +88,9 @@ func Execute(stack *data.Stack[RuntimeValue], labels *data.Stack[int], expressio
                 if err != nil {
                     return 0, 0, err
                 }
+
                 if branch > 0 {
-                    fmt.Printf("Branch to %v\n", branch)
+                    // fmt.Printf("Branch to %v\n", branch)
                     last := stack.Pop()
 
                     /* Remove all values on the stack that were produced during the dynamic extent of this block
@@ -94,6 +98,13 @@ func Execute(stack *data.Stack[RuntimeValue], labels *data.Stack[int], expressio
                     size := labels.Pop()
                     stack.Reduce(size)
                     stack.Push(last)
+
+                    /* if we are handling a return then don't change the branch value so that all parent blocks
+                     * also do a return
+                     */
+                    if branch == ReturnLabel {
+                        return instruction+1, branch, nil
+                    }
 
                     return instruction+1, branch-1, nil
                 }
@@ -131,6 +142,8 @@ func Execute(stack *data.Stack[RuntimeValue], labels *data.Stack[int], expressio
                 Kind: RuntimeValueI32,
                 I32: arg1.I32 + arg2.I32,
             })
+        case *core.ReturnExpression:
+            return 0, ReturnLabel, nil
         case *core.BranchExpression:
             expr := current.(*core.BranchExpression)
             return 0, int(expr.Label)+1, nil
@@ -225,6 +238,9 @@ func RunCode(code core.Code, frame Frame) (RuntimeValue, error) {
         instruction, branch, err = Execute(&stack, &labels, code.Expressions, instruction, frame)
         if err != nil {
             return RuntimeValue{}, err
+        }
+        if branch == ReturnLabel {
+            return stack.Pop(), nil
         }
         if branch != 0 {
             return RuntimeValue{}, fmt.Errorf("Branch to non-existent block: %v", branch)

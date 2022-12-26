@@ -90,9 +90,18 @@ func MakeExpressions(module WebAssemblyModule, expr *sexp.SExpression) []Express
                 return nil
             }
 
-            out := append(MakeExpressions(module, expr.Children[1]), MakeExpressions(module, expr.Children[2])...)
+            out := MakeExpressions(module, expr.Children[1])
+
+            if len(expr.Children) > 2 {
+                out = append(out, MakeExpressions(module, expr.Children[2])...)
+            }
 
             return append(out, &BranchIfExpression{Label: uint32(label)})
+        case "return":
+            if len(expr.Children) > 0 {
+                return append(MakeExpressions(module, expr.Children[0]), &ReturnExpression{})
+            }
+            return []Expression{&ReturnExpression{}}
         case "i32.const":
             value, err := strconv.Atoi(expr.Children[0].Value)
             if err != nil {

@@ -198,6 +198,13 @@ func (expr *LocalGetExpression) ConvertToWat(labels data.Stack[int], indents str
     return fmt.Sprintf("local.get %v", expr.Local)
 }
 
+type ReturnExpression struct {
+}
+
+func (expr *ReturnExpression) ConvertToWat(labels data.Stack[int], indents string) string {
+    return fmt.Sprintf("return")
+}
+
 type DropExpression struct {
 }
 
