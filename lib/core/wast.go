@@ -5,6 +5,7 @@ import (
     "os"
     "io"
     "errors"
+    "fmt"
     "github.com/kazzmir/webassembly/lib/sexp"
 )
 
@@ -13,6 +14,22 @@ import (
 type Wast struct {
     Module sexp.SExpression
     Expressions []sexp.SExpression
+}
+
+func (wast *Wast) CreateWasmModule() (WebAssemblyModule, error) {
+    if wast.Module.Name != "module" {
+        return WebAssemblyModule{}, fmt.Errorf("No module defined")
+    }
+
+    var moduleOut WebAssemblyModule
+
+    for _, expr := range wast.Module.Children {
+        if expr.Name == "func" {
+            fmt.Printf("Func: %v\n", expr)
+        }
+    }
+
+    return moduleOut, nil
 }
 
 func ParseWastFile(path string) (Wast, error) {

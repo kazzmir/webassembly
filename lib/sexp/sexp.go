@@ -69,11 +69,10 @@ func (sexpr *SExpression) String() string {
 
     var out strings.Builder
     out.WriteByte('(')
-    for i, child := range sexpr.Children {
+    out.WriteString(sexpr.Name)
+    for _, child := range sexpr.Children {
+        out.WriteByte(' ')
         out.WriteString(child.String())
-        if i < len(sexpr.Children) - 1 {
-            out.WriteByte(' ')
-        }
     }
     out.WriteByte(')')
 
