@@ -104,6 +104,17 @@ func (value *ValueType) ConvertToWat(indents string) string {
     }
 }
 
+func ValueTypeFromName(name string) ValueType {
+    switch name {
+        case "i32": return ValueTypeI32
+        case "i64": return ValueTypeI64
+        case "f32": return ValueTypeF32
+        case "f64": return ValueTypeF64
+    }
+
+    return InvalidValueType
+}
+
 func ReadValueType(reader io.ByteReader) (ValueType, error) {
     kind, err := reader.ReadByte()
     if err != nil {
@@ -144,6 +155,30 @@ const FunctionTypeMagic = 0x60
 type WebAssemblyFunction struct {
     InputTypes []ValueType
     OutputTypes []ValueType
+}
+
+func (function *WebAssemblyFunction) Equals(other WebAssemblyFunction) bool {
+    if len(function.InputTypes) != len(other.InputTypes) {
+        return false
+    }
+
+    if len(function.OutputTypes) != len(other.OutputTypes) {
+        return false
+    }
+
+    for i := 0; i < len(function.InputTypes); i++ {
+        if function.InputTypes[i] != other.InputTypes[i] {
+            return false
+        }
+    }
+
+    for i := 0; i < len(function.OutputTypes); i++ {
+        if function.OutputTypes[i] != other.OutputTypes[i] {
+            return false
+        }
+    }
+
+    return true
 }
 
 func (module *WebAssemblyFileModule) ReadFunctionType(reader io.Reader) (WebAssemblyFunction, error) {

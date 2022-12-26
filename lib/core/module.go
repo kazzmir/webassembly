@@ -477,8 +477,9 @@ func (section *WebAssemblyFunctionSection) GetFunctionType(index int) *TypeIndex
     return nil
 }
 
-func (section *WebAssemblyFunctionSection) AddFunction(index *TypeIndex){
+func (section *WebAssemblyFunctionSection) AddFunction(index *TypeIndex) uint32 {
     section.Functions = append(section.Functions, index)
+    return uint32(len(section.Functions) - 1)
 }
 
 func (section *WebAssemblyFunctionSection) ToInterface() WebAssemblySection {
@@ -623,6 +624,20 @@ func (section *WebAssemblyTypeSection) GetFunction(index uint32) WebAssemblyFunc
 
 func (section *WebAssemblyTypeSection) AddFunctionType(function WebAssemblyFunction) {
     section.Functions = append(section.Functions, function)
+}
+
+/* adds the function type to the list of function types and returns its index, or
+ * just returns the index of an existing type
+ */
+func (section *WebAssemblyTypeSection) GetOrCreateFunctionType(function WebAssemblyFunction) uint32 {
+    for i, check := range section.Functions {
+        if check.Equals(function) {
+            return uint32(i)
+        }
+    }
+
+    section.AddFunctionType(function)
+    return uint32(len(section.Functions) - 1)
 }
 
 func (section *WebAssemblyTypeSection) ConvertToWat(module *WebAssemblyModule, indents string) string {
