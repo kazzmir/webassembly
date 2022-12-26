@@ -28,10 +28,19 @@ func ConvertValueTypes(expr *sexp.SExpression) []ValueType {
     return out
 }
 
+func min(a, b int) int {
+    if a < b {
+        return a
+    }
+    return b
+}
+
 func MakeFunctionType(function *sexp.SExpression) WebAssemblyFunction {
     var out WebAssemblyFunction
 
-    for i := 1; i < 3; i++ {
+    // (func $name (param ...) (result ...) code ...)
+    // param or result might not exist, but if they do exist they will appear in positions 1/2
+    for i := 1; i < min(3, len(function.Children)); i++ {
         if function.Children[i].Name == "param" {
             out.InputTypes = ConvertValueTypes(function.Children[i])
         } else if function.Children[i].Name == "result" {
