@@ -108,6 +108,36 @@ func (expr *RefFuncExpression) ConvertToWat(labels data.Stack[int], indents stri
     return fmt.Sprintf("ref.func %v", expr.Function.Id)
 }
 
+type F32NegExpression struct {
+}
+
+func (expr *F32NegExpression) ConvertToWat(labels data.Stack[int], indents string) string {
+    return "f32.neg"
+}
+
+type F64NegExpression struct {
+}
+
+func (expr *F64NegExpression) ConvertToWat(labels data.Stack[int], indents string) string {
+    return "f64.neg"
+}
+
+type F32ConstExpression struct {
+    N float32
+}
+
+func (expr *F32ConstExpression) ConvertToWat(labels data.Stack[int], indents string) string {
+    return fmt.Sprintf("f32.const %v", expr.N)
+}
+
+type F64ConstExpression struct {
+    N float64
+}
+
+func (expr *F64ConstExpression) ConvertToWat(labels data.Stack[int], indents string) string {
+    return fmt.Sprintf("f64.const %v", expr.N)
+}
+
 type I32ConstExpression struct {
     N int32
 }
@@ -117,7 +147,7 @@ func (expr *I32ConstExpression) ConvertToWat(labels data.Stack[int], indents str
 }
 
 type I64ConstExpression struct {
-    N int32
+    N int64
 }
 
 func (expr *I64ConstExpression) ConvertToWat(labels data.Stack[int], indents string) string {
@@ -597,7 +627,7 @@ func ReadExpressionSequence(reader *ByteReader, readingIf bool) ([]Expression, E
                     return nil, 0, fmt.Errorf("Unable to read f32 value at instruction %v: %v", count, err)
                 }
 
-                _ = f32
+                sequence = append(sequence, &F32ConstExpression{N: f32})
 
             /* f64.const */
             case 0x44:
@@ -606,7 +636,7 @@ func ReadExpressionSequence(reader *ByteReader, readingIf bool) ([]Expression, E
                     return nil, 0, fmt.Errorf("Unable to read f64 value at instruction %v: %v", count, err)
                 }
 
-                _ = f64
+                sequence = append(sequence, &F64ConstExpression{N: f64})
 
             /* No-argument instructions */
 

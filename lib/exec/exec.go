@@ -16,6 +16,7 @@ const (
     RuntimeValueF64 = 4
 )
 
+/* represents values during the execution of the webassembly virtual machine */
 type RuntimeValue struct {
     Kind RuntimeValueKind
     I32 int32
@@ -40,6 +41,10 @@ func Trap(reason string) error {
     return fmt.Errorf(reason)
 }
 
+/* execute a single instruction
+ *  input: stack of runtime values, stack of block labels, list of expressions to execute, instruction index into 'expressions'
+ *  output: next instruction number to execute, number of blocks to skip (if greater than 0), and any errors that may occur (including traps)
+ */
 func Execute(stack *data.Stack[RuntimeValue], labels *data.Stack[int], expressions []core.Expression, instruction int) (int, int, error) {
     current := expressions[instruction]
 
@@ -92,6 +97,24 @@ func Execute(stack *data.Stack[RuntimeValue], labels *data.Stack[int], expressio
                 Kind: RuntimeValueI32,
                 I32: expr.N,
             })
+        case *core.I64ConstExpression:
+            expr := current.(*core.I64ConstExpression)
+            stack.Push(RuntimeValue{
+                Kind: RuntimeValueI64,
+                I64: expr.N,
+            })
+        case *core.F32ConstExpression:
+            expr := current.(*core.F32ConstExpression)
+            stack.Push(RuntimeValue{
+                Kind: RuntimeValueF32,
+                F32: expr.N,
+            })
+        case *core.F64ConstExpression:
+            expr := current.(*core.F64ConstExpression)
+            stack.Push(RuntimeValue{
+                Kind: RuntimeValueF64,
+                F64: expr.N,
+            })
         case *core.BranchExpression:
             expr := current.(*core.BranchExpression)
             return 0, int(expr.Label)+1, nil
@@ -111,11 +134,14 @@ func Execute(stack *data.Stack[RuntimeValue], labels *data.Stack[int], expressio
             } else {
                 return 0, int(expr.Label)+1, nil
             }
+        default:
+            return 0, 0, fmt.Errorf("unhandled instruction %+v", current)
     }
 
     return instruction + 1, 0, nil
 }
 
+/* evaluate a single expression and return whatever runtimevalue the expression produces */
 func EvaluateOne(expression core.Expression) (RuntimeValue, error) {
     var stack data.Stack[RuntimeValue]
     var labels data.Stack[int]
@@ -133,6 +159,9 @@ func EvaluateOne(expression core.Expression) (RuntimeValue, error) {
     return stack.Pop(), nil
 }
 
+/* evaluate an entire function
+ * FIXME: handle arguments
+ */
 func RunCode(code core.Code) (RuntimeValue, error) {
     var stack data.Stack[RuntimeValue]
     var labels data.Stack[int]
@@ -159,6 +188,7 @@ func RunCode(code core.Code) (RuntimeValue, error) {
     return RuntimeValue{}, nil
 }
 
+/* invoke an exported function in the given module */
 func Invoke(module core.WebAssemblyModule, name string) (RuntimeValue, error) {
     kind := module.GetExportSection().FindExportByName(name)
     if kind == nil {

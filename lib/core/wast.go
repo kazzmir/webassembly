@@ -110,14 +110,14 @@ func MakeExpressions(expr *sexp.SExpression) []Expression {
         case "i32.ctz":
             return append(MakeExpressions(expr.Children[0]), &I32CtzExpression{})
         case "i64.const":
-            value, err := strconv.Atoi(expr.Children[0].Value)
+            value, err := strconv.ParseInt(expr.Children[0].Value, 10, 64)
             if err != nil {
                 return nil
             }
 
             return []Expression{
                 &I64ConstExpression{
-                    N: int32(value),
+                    N: value,
                 },
             }
 
@@ -126,9 +126,42 @@ func MakeExpressions(expr *sexp.SExpression) []Expression {
         case "drop":
             argument := MakeExpressions(expr.Children[0])
             return append(argument, &DropExpression{})
+        case "f32.const":
+            value, err := strconv.ParseFloat(expr.Children[0].Value, 32)
+            if err != nil {
+                return nil
+            }
+            return []Expression{
+                &F32ConstExpression{
+                    N: float32(value),
+                },
+            }
+        case "f64.const":
+            value, err := strconv.ParseFloat(expr.Children[0].Value, 64)
+            if err != nil {
+                return nil
+            }
+            return []Expression{
+                &F64ConstExpression{
+                    N: value,
+                },
+            }
+        case "f32.neg":
+            if len(expr.Children) > 0 {
+                return append(MakeExpressions(expr.Children[0]), &F32NegExpression{})
+            }
+
+            return []Expression{&F32NegExpression{}}
+        case "f64.neg":
+            if len(expr.Children) > 0 {
+                return append(MakeExpressions(expr.Children[0]), &F64NegExpression{})
+            }
+
+            return []Expression{&F64NegExpression{}}
+
     }
 
-    fmt.Printf("Warning: unhandled expression '%v'\n", expr.Name)
+    fmt.Printf("Warning: unhandled wast expression '%v'\n", expr.Name)
 
     return nil
 }
