@@ -58,8 +58,12 @@ func MakeExpressions(expr *sexp.SExpression) []Expression {
     switch expr.Name {
         case "block":
             var children []Expression
+            var expectedType []ValueType
             for _, child := range expr.Children {
                 if child.Name == "result" {
+                    for _, result := range child.Children {
+                        expectedType = append(expectedType, ValueTypeFromName(result.Value))
+                    }
                     continue
                 }
                 children = append(children, MakeExpressions(child)...)
@@ -68,6 +72,7 @@ func MakeExpressions(expr *sexp.SExpression) []Expression {
             return []Expression{&BlockExpression{
                     Instructions: children,
                     Kind: BlockKindBlock,
+                    ExpectedType: expectedType,
                 },
             }
         case "br":

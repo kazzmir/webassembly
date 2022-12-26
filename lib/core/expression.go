@@ -224,6 +224,7 @@ type BlockExpression struct {
     Expression
     Instructions []Expression
     Kind BlockKind
+    ExpectedType []ValueType
 }
 
 func (block *BlockExpression) ConvertToWat(labels data.Stack[int], indents string) string {
