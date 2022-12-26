@@ -3,6 +3,8 @@ package core
 import (
     "fmt"
     "strings"
+
+    "github.com/kazzmir/webassembly/lib/data"
 )
 
 type WebAssemblySection interface {
@@ -79,7 +81,7 @@ func (section *WebAssemblyDataSection) ConvertToWat(module *WebAssemblyModule, i
                 active := item.Mode.(*MemoryActiveMode)
                 out.WriteByte('(')
                 for e, expr := range active.Offset {
-                    var label Stack[int]
+                    var label data.Stack[int]
                     out.WriteString(expr.ConvertToWat(label, ""))
                     if e < len(active.Offset) - 1 {
                         out.WriteByte(' ')
@@ -233,7 +235,7 @@ func (section *WebAssemblyElementSection) ConvertToWat(module *WebAssemblyModule
         active, isActive := element.Mode.(*ElementModeActive)
         if isActive {
             out.WriteString("(")
-            var labels Stack[int]
+            var labels data.Stack[int]
             for _, expr := range active.Offset {
                 out.WriteString(expr.ConvertToWat(labels, indents))
             }
@@ -420,6 +422,16 @@ func (section *WebAssemblyExportSection) AddExport(name string, kind Index){
         Name: name,
         Kind: kind,
     })
+}
+
+func (section *WebAssemblyExportSection) FindExportByName(name string) Index {
+    for _, item := range section.Items {
+        if item.Name == name {
+            return item.Kind
+        }
+    }
+
+    return nil
 }
 
 func (section *WebAssemblyExportSection) ToInterface() WebAssemblySection {
@@ -689,6 +701,17 @@ func (module *WebAssemblyModule) FindFunctionType(index int) *TypeIndex {
         function, ok := section.(*WebAssemblyFunctionSection)
         if ok {
             return function.GetFunctionType(index)
+        }
+    }
+
+    return nil
+}
+
+func (module *WebAssemblyModule) GetExportSection() *WebAssemblyExportSection {
+    for _, section := range module.Sections {
+        export, ok := section.(*WebAssemblyExportSection)
+        if ok {
+            return export
         }
     }
 

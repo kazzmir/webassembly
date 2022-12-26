@@ -135,11 +135,13 @@ func MakeCode(function *sexp.SExpression) Code {
     for startIndex := startIndex; startIndex < len(function.Children); startIndex++ {
         current := function.Children[startIndex]
         if current.Name == "local" {
+            /* FIXME: compress equal locals. i32 i32 i32 -> count=3 */
             out.Locals = append(out.Locals, Local{
                 Count: 1,
                 Type: ValueTypeFromName(current.Children[0].Value),
             })
         } else {
+            /* FIXME: will we ever have more than 1 expression in the body of a function? */
             expressions := MakeExpressions(current)
             out.Expressions = append(out.Expressions, expressions...)
         }

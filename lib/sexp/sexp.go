@@ -182,7 +182,14 @@ func ParseSExpressionReader(reader io.ByteScanner) (SExpression, error) {
                 }
             case TokenRightParens:
                 current = current.Parent
+                /* if we reached the end of the current sexp then quit */
+                if current == nil {
+                    quit = true
+                }
             case TokenData:
+                if current == nil {
+                    return SExpression{}, fmt.Errorf("no left parens seen")
+                }
                 if current.Name == "" {
                     current.Name = token.Value
                 } else {
@@ -201,9 +208,7 @@ func ParseSExpressionReader(reader io.ByteScanner) (SExpression, error) {
         return SExpression{}, MismatchedParensError
     }
 
-    if nextToken(reader).Kind != TokenEOF {
-        return SExpression{}, fmt.Errorf("unable to parse")
-    }
+    /* there might be more sexps after this one so don't touch the reader */
 
     return *top, nil
 }
