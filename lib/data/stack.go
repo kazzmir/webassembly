@@ -17,6 +17,11 @@ func (stack *Stack[T]) Push(value T){
 }
 
 func (stack *Stack[T]) Pop() T {
+    if len(stack.Values) == 0 {
+        var x T
+        return x
+    }
+
     t := stack.Values[len(stack.Values)-1]
     stack.Values = stack.Values[0:len(stack.Values)-1]
     return t

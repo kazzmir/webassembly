@@ -70,6 +70,18 @@ func MakeExpressions(expr *sexp.SExpression) []Expression {
                     Kind: BlockKindBlock,
                 },
             }
+        case "br":
+            label, err := strconv.Atoi(expr.Children[0].Value)
+            if err != nil {
+                return nil
+            }
+
+            if len(expr.Children) > 1 {
+                return append(MakeExpressions(expr.Children[1]), &BranchExpression{Label: uint32(label)})
+            } else {
+                return []Expression{&BranchExpression{Label: uint32(label)}}
+            }
+
         case "br_if":
             label, err := strconv.Atoi(expr.Children[0].Value)
             if err != nil {

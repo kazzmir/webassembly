@@ -25,6 +25,20 @@ func doAssertReturn(module core.WebAssemblyModule, assert sexp.SExpression){
         } else {
             fmt.Printf("Result: %v\n", result)
         }
+
+        if len(assert.Children) == 2 {
+            expressions := core.MakeExpressions(assert.Children[1])
+            expected, err := exec.EvaluateOne(expressions[0])
+            if err != nil {
+                fmt.Printf("Error: unable to compute expected value: %v\n", err)
+            } else {
+                if result != expected {
+                    fmt.Printf("Result: %v\n", result)
+                    fmt.Printf("Expected: %v\n", expected)
+                    fmt.Printf("Error: assertion failed\n")
+                }
+            }
+        }
     }
 }
 

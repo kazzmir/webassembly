@@ -359,6 +359,14 @@ func (section *WebAssemblyCodeSection) ToInterface() WebAssemblySection {
     return section
 }
 
+func (section *WebAssemblyCodeSection) GetFunction(index uint32) Code {
+    if index < uint32(len(section.Code)) {
+        return section.Code[index]
+    }
+
+    return Code{}
+}
+
 func (section *WebAssemblyCodeSection) AddCode(code Code){
     section.Code = append(section.Code, code)
 }
@@ -384,7 +392,6 @@ func (section *WebAssemblyCodeSection) ConvertToWat(module *WebAssemblyModule, i
                 }
                 out.WriteByte(')')
             }
-
 
             if len(function.OutputTypes) > 0 {
                 out.WriteString(" (result")
@@ -707,15 +714,24 @@ func (module *WebAssemblyModule) FindFunctionType(index int) *TypeIndex {
     return nil
 }
 
-func (module *WebAssemblyModule) GetExportSection() *WebAssemblyExportSection {
-    for _, section := range module.Sections {
-        export, ok := section.(*WebAssemblyExportSection)
+func findSection[T WebAssemblySection](sections []WebAssemblySection) T {
+    for _, section := range sections {
+        x, ok := section.(T)
         if ok {
-            return export
+            return x
         }
     }
 
-    return nil
+    var x T
+    return x
+}
+
+func (module *WebAssemblyModule) GetCodeSection() *WebAssemblyCodeSection {
+    return findSection[*WebAssemblyCodeSection](module.Sections)
+}
+
+func (module *WebAssemblyModule) GetExportSection() *WebAssemblyExportSection {
+    return findSection[*WebAssemblyExportSection](module.Sections)
 }
 
 func (module *WebAssemblyModule) GetFunction(index uint32) WebAssemblyFunction {
