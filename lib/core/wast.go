@@ -31,30 +31,18 @@ func ConvertValueTypes(expr *sexp.SExpression) []ValueType {
 func MakeFunctionType(function *sexp.SExpression) WebAssemblyFunction {
     var out WebAssemblyFunction
 
-    switch len(function.Children) {
-        // (func name (params ...) code)
-        // (func name (result ...) code)
-        case 3:
-            if function.Children[2].Name == "params" {
-                out.InputTypes = ConvertValueTypes(function.Children[2])
-            } else if function.Children[2].Name == "result" {
-                out.OutputTypes = ConvertValueTypes(function.Children[2])
-            }
-        // (func name (params ...) (result ...) code)
-        case 4:
-            if function.Children[2].Name == "params" {
-                out.InputTypes = ConvertValueTypes(function.Children[2])
-            }
-
-            if function.Children[3].Name == "result" {
-                out.OutputTypes = ConvertValueTypes(function.Children[3])
-            }
+    for i := 1; i < 3; i++ {
+        if function.Children[i].Name == "param" {
+            out.InputTypes = ConvertValueTypes(function.Children[i])
+        } else if function.Children[i].Name == "result" {
+            out.OutputTypes = ConvertValueTypes(function.Children[i])
+        }
     }
 
     return out
 }
 
-func MakeExpressions(expr *sexp.SExpression) []Expression {
+func MakeExpressions(module WebAssemblyModule, expr *sexp.SExpression) []Expression {
     switch expr.Name {
         case "block":
             var children []Expression
@@ -66,7 +54,7 @@ func MakeExpressions(expr *sexp.SExpression) []Expression {
                     }
                     continue
                 }
-                children = append(children, MakeExpressions(child)...)
+                children = append(children, MakeExpressions(module, child)...)
             }
 
             return []Expression{&BlockExpression{
@@ -82,7 +70,7 @@ func MakeExpressions(expr *sexp.SExpression) []Expression {
             }
 
             if len(expr.Children) > 1 {
-                return append(MakeExpressions(expr.Children[1]), &BranchExpression{Label: uint32(label)})
+                return append(MakeExpressions(module, expr.Children[1]), &BranchExpression{Label: uint32(label)})
             } else {
                 return []Expression{&BranchExpression{Label: uint32(label)}}
             }
@@ -93,7 +81,7 @@ func MakeExpressions(expr *sexp.SExpression) []Expression {
                 return nil
             }
 
-            out := append(MakeExpressions(expr.Children[1]), MakeExpressions(expr.Children[2])...)
+            out := append(MakeExpressions(module, expr.Children[1]), MakeExpressions(module, expr.Children[2])...)
 
             return append(out, &BranchIfExpression{Label: uint32(label)})
         case "i32.const":
@@ -108,7 +96,7 @@ func MakeExpressions(expr *sexp.SExpression) []Expression {
                 },
             }
         case "i32.ctz":
-            return append(MakeExpressions(expr.Children[0]), &I32CtzExpression{})
+            return append(MakeExpressions(module, expr.Children[0]), &I32CtzExpression{})
         case "i64.const":
             value, err := strconv.ParseInt(expr.Children[0].Value, 10, 64)
             if err != nil {
@@ -122,9 +110,23 @@ func MakeExpressions(expr *sexp.SExpression) []Expression {
             }
 
         case "i64.ctz":
-            return append(MakeExpressions(expr.Children[0]), &I64CtzExpression{})
+            return append(MakeExpressions(module, expr.Children[0]), &I64CtzExpression{})
+        case "i32.add":
+            arg1 := MakeExpressions(module, expr.Children[0])
+            arg2 := MakeExpressions(module, expr.Children[1])
+            out := append(arg1, arg2...)
+            return append(out, &I32AddExpression{})
+        case "call":
+            name := expr.Children[0].Value
+            index, ok := module.GetFunctionSection().GetFunctionIndexByName(name)
+            if !ok {
+                fmt.Printf("Unknown function in call '%v'\n", name)
+                return nil
+            }
+
+            return []Expression{&CallExpression{Index: &FunctionIndex{uint32(index)}}}
         case "drop":
-            argument := MakeExpressions(expr.Children[0])
+            argument := MakeExpressions(module, expr.Children[0])
             return append(argument, &DropExpression{})
         case "f32.const":
             value, err := strconv.ParseFloat(expr.Children[0].Value, 32)
@@ -148,13 +150,13 @@ func MakeExpressions(expr *sexp.SExpression) []Expression {
             }
         case "f32.neg":
             if len(expr.Children) > 0 {
-                return append(MakeExpressions(expr.Children[0]), &F32NegExpression{})
+                return append(MakeExpressions(module, expr.Children[0]), &F32NegExpression{})
             }
 
             return []Expression{&F32NegExpression{}}
         case "f64.neg":
             if len(expr.Children) > 0 {
-                return append(MakeExpressions(expr.Children[0]), &F64NegExpression{})
+                return append(MakeExpressions(module, expr.Children[0]), &F64NegExpression{})
             }
 
             return []Expression{&F64NegExpression{}}
@@ -173,7 +175,7 @@ func MakeExpressions(expr *sexp.SExpression) []Expression {
     return nil
 }
 
-func MakeCode(function *sexp.SExpression) Code {
+func MakeCode(module WebAssemblyModule, function *sexp.SExpression) Code {
     var out Code
 
     startIndex := 1
@@ -199,7 +201,7 @@ func MakeCode(function *sexp.SExpression) Code {
             })
         } else {
             /* FIXME: will we ever have more than 1 expression in the body of a function? */
-            expressions := MakeExpressions(current)
+            expressions := MakeExpressions(module, current)
             out.Expressions = append(out.Expressions, expressions...)
         }
     }
@@ -218,7 +220,7 @@ func (wast *Wast) CreateWasmModule() (WebAssemblyModule, error) {
 
     var moduleOut WebAssemblyModule
     typeSection := new(WebAssemblyTypeSection)
-    functionSection := new(WebAssemblyFunctionSection)
+    functionSection := WebAssemblyFunctionSectionCreate()
     codeSection := new(WebAssemblyCodeSection)
     exportSection := new(WebAssemblyExportSection)
 
@@ -246,9 +248,9 @@ func (wast *Wast) CreateWasmModule() (WebAssemblyModule, error) {
 
             functionIndex := functionSection.AddFunction(&TypeIndex{
                 Id: typeIndex,
-            })
+            }, cleanName(functionName.Value))
 
-            code := MakeCode(expr)
+            code := MakeCode(moduleOut, expr)
 
             codeSection.AddCode(code)
 
@@ -259,10 +261,9 @@ func (wast *Wast) CreateWasmModule() (WebAssemblyModule, error) {
 
             _ = functionSection.AddFunction(&TypeIndex{
                 Id: typeIndex,
-            })
+            }, name.Value)
 
-            var code Code
-            codeSection.AddCode(code)
+            codeSection.AddCode(MakeCode(moduleOut, expr))
         }
     }
 

@@ -3,6 +3,7 @@ package exec
 import (
     "fmt"
     "strings"
+    "reflect"
     "github.com/kazzmir/webassembly/lib/core"
     "github.com/kazzmir/webassembly/lib/data"
     "github.com/kazzmir/webassembly/lib/sexp"
@@ -123,6 +124,13 @@ func Execute(stack *data.Stack[RuntimeValue], labels *data.Stack[int], expressio
                 Kind: RuntimeValueF64,
                 F64: expr.N,
             })
+        case *core.I32AddExpression:
+            arg1 := stack.Pop()
+            arg2 := stack.Pop()
+            stack.Push(RuntimeValue{
+                Kind: RuntimeValueI32,
+                I32: arg1.I32 + arg2.I32,
+            })
         case *core.BranchExpression:
             expr := current.(*core.BranchExpression)
             return 0, int(expr.Label)+1, nil
@@ -144,9 +152,42 @@ func Execute(stack *data.Stack[RuntimeValue], labels *data.Stack[int], expressio
             }
         case *core.LocalGetExpression:
             expr := current.(*core.LocalGetExpression)
+            if len(frame.Locals) <= int(expr.Local) {
+                return 0, 0, fmt.Errorf("unable to get local %v when frame has %v locals", expr.Local, len(frame.Locals))
+            }
             stack.Push(frame.Locals[expr.Local])
+        case *core.CallExpression:
+            /* create a new stack frame, pop N values off the stack and put them in the locals of the frame.
+             * then invoke the code of the function with the new frame.
+             * put the resulting runtime value back on the stack
+             */
+            expr := current.(*core.CallExpression)
+
+            functionTypeIndex := frame.Module.GetFunctionSection().GetFunctionType(int(expr.Index.Id))
+            functionType := frame.Module.GetTypeSection().GetFunction(functionTypeIndex.Id)
+
+            var args []RuntimeValue
+            for _, input := range functionType.InputTypes {
+                // FIXME: check that the stack contains the same type as 'input'
+                _ = input
+                args = append(args, stack.Pop())
+            }
+
+            code := frame.Module.GetCodeSection().GetFunction(expr.Index.Id)
+
+            out, err := RunCode(code, Frame{
+                Locals: args,
+                Module: frame.Module,
+            })
+
+            if err != nil {
+                return 0, 0, err
+            }
+
+            stack.Push(out)
+
         default:
-            return 0, 0, fmt.Errorf("unhandled instruction %+v", current)
+            return 0, 0, fmt.Errorf("unhandled instruction %v %+v", reflect.TypeOf(current), current)
     }
 
     return instruction + 1, 0, nil
@@ -171,7 +212,6 @@ func EvaluateOne(expression core.Expression) (RuntimeValue, error) {
 }
 
 /* evaluate an entire function
- * FIXME: handle arguments
  */
 func RunCode(code core.Code, frame Frame) (RuntimeValue, error) {
     var stack data.Stack[RuntimeValue]
@@ -234,7 +274,7 @@ func AssertReturn(module core.WebAssemblyModule, assert sexp.SExpression) error 
 
         var args []RuntimeValue
         for _, arg := range what.Children[1:] {
-            expressions := core.MakeExpressions(arg)
+            expressions := core.MakeExpressions(module, arg)
             nextArg, err := EvaluateOne(expressions[0])
             if err != nil {
                 return err
@@ -249,7 +289,7 @@ func AssertReturn(module core.WebAssemblyModule, assert sexp.SExpression) error 
         }
 
         if len(assert.Children) == 2 {
-            expressions := core.MakeExpressions(assert.Children[1])
+            expressions := core.MakeExpressions(module, assert.Children[1])
             expected, err := EvaluateOne(expressions[0])
             if err != nil {
                 return err

@@ -497,7 +497,7 @@ func (module *WebAssemblyFileModule) ReadFunctionSection(size uint32) (*WebAssem
         return nil, err
     }
 
-    var section WebAssemblyFunctionSection
+    section := WebAssemblyFunctionSectionCreate()
 
     if module.debug {
         log.Printf("Functions %v\n", types)
@@ -514,7 +514,7 @@ func (module *WebAssemblyFileModule) ReadFunctionSection(size uint32) (*WebAssem
             log.Printf("Function %v has type index 0x%x\n", i, index)
         }
 
-        section.AddFunction(index)
+        section.AddFunction(index, "")
     }
 
     _, err = sectionReader.ReadByte()
@@ -522,7 +522,7 @@ func (module *WebAssemblyFileModule) ReadFunctionSection(size uint32) (*WebAssem
         return nil, fmt.Errorf("Error reading function section: not all bytes were read")
     }
 
-    return &section, nil
+    return section, nil
 }
 
 type MemoryIndex struct {

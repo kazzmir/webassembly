@@ -487,6 +487,18 @@ func (section *WebAssemblyExportSection) String() string {
 
 type WebAssemblyFunctionSection struct {
     Functions []*TypeIndex
+    NamedFunctions map[string]int // map of a function name to its index in Functions
+}
+
+func WebAssemblyFunctionSectionCreate() *WebAssemblyFunctionSection {
+    return &WebAssemblyFunctionSection{
+        NamedFunctions: make(map[string]int),
+    }
+}
+
+func (section *WebAssemblyFunctionSection) GetFunctionIndexByName(name string) (int, bool) {
+    value, ok := section.NamedFunctions[name]
+    return value, ok
 }
 
 func (section *WebAssemblyFunctionSection) GetFunctionType(index int) *TypeIndex {
@@ -497,7 +509,10 @@ func (section *WebAssemblyFunctionSection) GetFunctionType(index int) *TypeIndex
     return nil
 }
 
-func (section *WebAssemblyFunctionSection) AddFunction(index *TypeIndex) uint32 {
+func (section *WebAssemblyFunctionSection) AddFunction(index *TypeIndex, name string) uint32 {
+    if name != "" {
+        section.NamedFunctions[name] = len(section.Functions)
+    }
     section.Functions = append(section.Functions, index)
     return uint32(len(section.Functions) - 1)
 }
@@ -732,6 +747,14 @@ func (module *WebAssemblyModule) GetCodeSection() *WebAssemblyCodeSection {
 
 func (module *WebAssemblyModule) GetExportSection() *WebAssemblyExportSection {
     return findSection[*WebAssemblyExportSection](module.Sections)
+}
+
+func (module *WebAssemblyModule) GetFunctionSection() *WebAssemblyFunctionSection {
+    return findSection[*WebAssemblyFunctionSection](module.Sections)
+}
+
+func (module *WebAssemblyModule) GetTypeSection() *WebAssemblyTypeSection {
+    return findSection[*WebAssemblyTypeSection](module.Sections)
 }
 
 func (module *WebAssemblyModule) GetFunction(index uint32) WebAssemblyFunction {
