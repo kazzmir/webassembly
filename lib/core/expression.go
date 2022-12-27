@@ -86,6 +86,21 @@ func (call *CallExpression) ConvertToWat(labels data.Stack[int], indents string)
     return fmt.Sprintf("call %v", call.Index.Id)
 }
 
+type BranchTableExpression struct {
+    Labels []uint32
+}
+
+func (expr *BranchTableExpression) ConvertToWat(labels data.Stack[int], indents string) string {
+    var out strings.Builder
+
+    out.WriteString("br_table")
+    for _, label := range expr.Labels {
+        out.WriteString(fmt.Sprintf(" %v (;@%v;)", label, labels.Get(label)))
+    }
+
+    return out.String()
+}
+
 type BranchIfExpression struct {
     Label uint32
 }
@@ -271,10 +286,10 @@ type BlockExpression struct {
 }
 
 func (block *BlockExpression) ConvertToWat(labels data.Stack[int], indents string) string {
-    labels.Push(labels.Size()+1)
+    labels.Push(labels.Size())
     defer labels.Pop()
 
-    labelNumber := labels.Size()
+    labelNumber := labels.Size() - 1
 
     var out strings.Builder
 

@@ -152,6 +152,25 @@ func Execute(stack *data.Stack[RuntimeValue], labels *data.Stack[int], expressio
             stack.Pop()
         case *core.ReturnExpression:
             return 0, ReturnLabel, nil
+        case *core.BranchTableExpression:
+            expr := current.(*core.BranchTableExpression)
+            value := stack.Pop()
+
+            if value.Kind != RuntimeValueI32 {
+                return 0, 0, Trap(fmt.Sprintf("top of stack was not an i32: %+v", value))
+            }
+
+            /* FIXME: what to do here? */
+            if len(expr.Labels) == 0 {
+                return 0, 0, fmt.Errorf("br_table had no labels")
+            }
+
+            if int(value.I32) < len(expr.Labels) {
+                return 0, int(expr.Labels[value.I32])+1, nil
+            }
+
+            return 0, int(expr.Labels[len(expr.Labels)-1])+1, nil
+
         case *core.BranchExpression:
             expr := current.(*core.BranchExpression)
             return 0, int(expr.Label)+1, nil

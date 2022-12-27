@@ -71,6 +71,38 @@
   (func (export "as-br-value") (result i32)
     (block (result i32) (br 0 (br_if 0 (i32.const 1) (i32.const 2)))))
 
+  (func (export "as-br_if-cond")
+    (block (br_if 0 (br_if 0 (i32.const 1) (i32.const 1))))
+  )
+
+  (func (export "as-br_if-value") (result i32)
+    (block (result i32)
+    (drop (br_if 0 (br_if 0 (i32.const 1) (i32.const 2)) (i32.const 3)))
+     (i32.const 4)))
+
+  (func (export "as-br_if-value-cond") (param i32) (result i32)
+    (block (result i32)
+      (drop (br_if 0 (i32.const 2) (br_if 0 (i32.const 1) (local.get 0))))
+      (i32.const 4)))
+
+  (func (export "as-br_table-index")
+    (block (br_table 0 0 0 (br_if 0 (i32.const 1) (i32.const 2)))))
+
+  (func (export "as-br_table-value") (result i32)
+    (block (result i32)
+      (br_table 0 0 0
+                (br_if 0 (i32.const 1) (i32.const 2))
+                (i32.const 3))
+      (i32.const 4)
+      ))
+
+  (func (export "as-br_table-value-index") (result i32)
+     (block (result i32)
+       (br_table 0 0
+                 (i32.const 2)
+                 (br_if 0 (i32.const 1) (i32.const 3)))
+       (i32.const 4)))
+
 )
 
 (assert_return (invoke "type-i32"))
@@ -107,3 +139,12 @@
 (assert_return (invoke "as-loop-last" (i32.const 1)))
 
 (assert_return (invoke "as-br-value") (i32.const 1))
+
+(assert_return (invoke "as-br_if-cond"))
+(assert_return (invoke "as-br_if-value") (i32.const 1))
+(assert_return (invoke "as-br_if-value-cond" (i32.const 0)) (i32.const 2))
+(assert_return (invoke "as-br_if-value-cond" (i32.const 1)) (i32.const 1))
+
+(assert_return (invoke "as-br_table-index"))
+(assert_return (invoke "as-br_table-value") (i32.const 1))
+(assert_return (invoke "as-br_table-value-index") (i32.const 1))

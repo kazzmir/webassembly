@@ -102,6 +102,25 @@ func MakeExpressions(module WebAssemblyModule, expr *sexp.SExpression) []Express
             }
 
             return append(out, &BranchIfExpression{Label: uint32(label)})
+        case "br_table":
+            var out []Expression
+            var labels []uint32
+            // (br_table l1 l2 l3 (expr ...) (expr ...))
+            for _, child := range expr.Children {
+                if child.Value != "" {
+                    label, err := strconv.Atoi(child.Value)
+                    if err != nil {
+                        return nil
+                    }
+
+                    labels = append(labels, uint32(label))
+                } else {
+                    // FIXME: once we start seeing expressions we shouldn't see any more labels, try to enforce this
+                    out = append(out, MakeExpressions(module, child)...)
+                }
+            }
+
+            return append(out, &BranchTableExpression{Labels: labels})
         case "return":
             if len(expr.Children) > 0 {
                 return append(MakeExpressions(module, expr.Children[0]), &ReturnExpression{})
