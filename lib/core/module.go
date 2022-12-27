@@ -209,7 +209,7 @@ func (section *WebAssemblyElementSection) ToInterface() WebAssemblySection {
     return section
 }
 
-func (section *WebAssemblyElementSection) AddFunctionRefInit(functions []*FunctionIndex, expression []Expression){
+func (section *WebAssemblyElementSection) AddFunctionRefInit(functions []*FunctionIndex, table int, expression []Expression){
     var inits []Expression
     for _, function := range functions {
         inits = append(inits, &RefFuncExpression{
@@ -220,7 +220,7 @@ func (section *WebAssemblyElementSection) AddFunctionRefInit(functions []*Functi
         Type: RefTypeFunction,
         Inits: inits,
         Mode: &ElementModeActive{
-            Table: 0,
+            Table: table,
             Offset: expression,
         },
     })
@@ -304,8 +304,9 @@ type WebAssemblyTableSection struct {
     Items []TableType
 }
 
-func (section *WebAssemblyTableSection) AddTable(table TableType){
+func (section *WebAssemblyTableSection) AddTable(table TableType) uint32 {
     section.Items = append(section.Items, table)
+    return uint32(len(section.Items) - 1)
 }
 
 func (section *WebAssemblyTableSection) ToInterface() WebAssemblySection {
@@ -659,6 +660,11 @@ func (section *WebAssemblyTypeSection) GetFunction(index uint32) WebAssemblyFunc
 
 func (section *WebAssemblyTypeSection) AddFunctionType(function WebAssemblyFunction) {
     section.Functions = append(section.Functions, function)
+}
+
+/* associate the given name to the given type index */
+func (section *WebAssemblyTypeSection) AssociateName(name string, index *TypeIndex){
+    // TODO
 }
 
 /* adds the function type to the list of function types and returns its index, or

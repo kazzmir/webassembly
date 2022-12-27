@@ -814,7 +814,7 @@ func (module *WebAssemblyFileModule) ReadElementSection(size uint32) (*WebAssemb
                     log.Printf("Element %v: index=%v expressions=%v\n", i, index, expressions)
                 }
 
-                section.AddFunctionRefInit(functions, expressions)
+                section.AddFunctionRefInit(functions, 0, expressions)
             case 1:
             case 2:
             case 3:

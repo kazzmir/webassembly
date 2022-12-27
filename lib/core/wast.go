@@ -311,11 +311,15 @@ func (wast *Wast) CreateWasmModule() (WebAssemblyModule, error) {
     typeSection := new(WebAssemblyTypeSection)
     functionSection := WebAssemblyFunctionSectionCreate()
     codeSection := new(WebAssemblyCodeSection)
+    tableSection := new(WebAssemblyTableSection)
     exportSection := new(WebAssemblyExportSection)
+    elementSection := new(WebAssemblyElementSection)
 
     moduleOut.AddSection(typeSection)
     moduleOut.AddSection(functionSection)
     moduleOut.AddSection(codeSection)
+    moduleOut.AddSection(tableSection)
+    moduleOut.AddSection(elementSection)
     moduleOut.AddSection(exportSection)
 
     for _, expr := range wast.Module.Children {
@@ -325,34 +329,77 @@ func (wast *Wast) CreateWasmModule() (WebAssemblyModule, error) {
         }
         */
 
-        name := expr.Children[0]
-        if name.Name == "export" {
-            // 1. create a type that matches the given function and call typesection.AddFunctionType()
-            // 2. create a function that references the newly created type and call functionsection.AddFunction()
-            // 3. create a FunctionIndex and add it to the export section with exportSection.AddExport()
-            functionName := name.Children[0]
+        switch expr.Name {
+            case "func":
+                name := expr.Children[0]
+                if name.Name == "export" {
+                    // 1. create a type that matches the given function and call typesection.AddFunctionType()
+                    // 2. create a function that references the newly created type and call functionsection.AddFunction()
+                    // 3. create a FunctionIndex and add it to the export section with exportSection.AddExport()
+                    functionName := name.Children[0]
 
-            functionType := MakeFunctionType(expr)
-            typeIndex := typeSection.GetOrCreateFunctionType(functionType)
+                    functionType := MakeFunctionType(expr)
+                    typeIndex := typeSection.GetOrCreateFunctionType(functionType)
 
-            functionIndex := functionSection.AddFunction(&TypeIndex{
-                Id: typeIndex,
-            }, cleanName(functionName.Value))
+                    functionIndex := functionSection.AddFunction(&TypeIndex{
+                        Id: typeIndex,
+                    }, cleanName(functionName.Value))
 
-            code := MakeCode(moduleOut, expr)
+                    code := MakeCode(moduleOut, expr)
 
-            codeSection.AddCode(code)
+                    codeSection.AddCode(code)
 
-            exportSection.AddExport(cleanName(functionName.Value), &FunctionIndex{Id: functionIndex})
-        } else {
-            functionType := MakeFunctionType(expr)
-            typeIndex := typeSection.GetOrCreateFunctionType(functionType)
+                    exportSection.AddExport(cleanName(functionName.Value), &FunctionIndex{Id: functionIndex})
+                } else {
+                    functionType := MakeFunctionType(expr)
+                    typeIndex := typeSection.GetOrCreateFunctionType(functionType)
 
-            _ = functionSection.AddFunction(&TypeIndex{
-                Id: typeIndex,
-            }, name.Value)
+                    _ = functionSection.AddFunction(&TypeIndex{
+                        Id: typeIndex,
+                    }, name.Value)
 
-            codeSection.AddCode(MakeCode(moduleOut, expr))
+                    codeSection.AddCode(MakeCode(moduleOut, expr))
+                }
+            case "type":
+                name := expr.Children[0]
+                kind := expr.Children[1]
+                if kind.Name == "func" {
+                    typeIndex := typeSection.GetOrCreateFunctionType(MakeFunctionType(kind))
+                    typeSection.AssociateName(name.Value, &TypeIndex{Id: typeIndex})
+                }
+            case "table":
+                // so far this handles an inline table expression with funcref elements already given
+                reftype := expr.Children[0]
+                if reftype.Value == "funcrec" {
+                    elements := expr.Children[1]
+                    if elements.Name == "elem" {
+                        tableId := tableSection.AddTable(TableType{
+                            Limit: Limit{
+                                Minimum: uint32(len(elements.Children)),
+                                Maximum: uint32(len(elements.Children)),
+                                HasMaximum: true,
+                            },
+                            RefType: RefTypeFunction,
+                        })
+
+                        var functions []*FunctionIndex
+                        for _, element := range elements.Children {
+                            if element.Value != "" {
+                                functionIndex, ok := functionSection.GetFunctionIndexByName(element.Value)
+                                if ok {
+                                    functions = append(functions, &FunctionIndex{Id: uint32(functionIndex)})
+                                } else {
+                                    fmt.Printf("Warning: unable to find funcref '%v'\n", element.Value)
+                                }
+                            }
+                        }
+
+                        elementSection.AddFunctionRefInit(functions, int(tableId), []Expression{&I32ConstExpression{N: 0}})
+                    }
+                }
+
+            default:
+                fmt.Printf("Warning: unhandled wast top level '%v'\n", expr.Name)
         }
     }
 

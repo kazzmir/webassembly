@@ -158,6 +158,15 @@
          (i32.const 2)
          (br_if 0 (i32.const 14) (i32.const 1)))))
 
+  (func $func (param i32 i32 i32) (result i32) (local.get 0))
+  (type $check (func (param i32 i32 i32) (result i32)))
+  (table funcref (elem $func))
+
+  (func (export "as-call_indirect-func") (result i32)
+     (block (result i32)
+       (call_indirect (type $check)
+         (br_if 0 (i32.const 4) (i32.const 10))
+         (i32.const 1) (i32.const 2) (i32.const 0))))
 
 )
 
@@ -231,3 +240,4 @@
 (assert_return (invoke "as-call-mid") (i32.const 13))
 (assert_return (invoke "as-call-last") (i32.const 14))
 
+(assert_return (invoke "as-call_indirect-func") (i32.const 4))
