@@ -168,6 +168,22 @@
          (br_if 0 (i32.const 4) (i32.const 10))
          (i32.const 1) (i32.const 2) (i32.const 0))))
 
+  (func (export "as-call_indirect-first") (result i32)
+     (block (result i32)
+       (call_indirect (type $check)
+          (i32.const 1) (br_if 0 (i32.const 4) (i32.const 10)) (i32.const 2) (i32.const 0))))
+
+  (func (export "as-call_indirect-mid") (result i32)
+     (block (result i32)
+         (call_indirect (type $check)
+            (i32.const 1) (i32.const 2) (br_if 0 (i32.const 4) (i32.const 10)) (i32.const 0))))
+
+  (func (export "as-call_indirect-last") (result i32)
+      (block (result i32)
+         (call_indirect (type $check)
+            (i32.const 1) (i32.const 2) (i32.const 3) (br_if 0 (i32.const 4) (i32.const 10)))))
+
+
 )
 
 (assert_return (invoke "type-i32"))
@@ -241,3 +257,6 @@
 (assert_return (invoke "as-call-last") (i32.const 14))
 
 (assert_return (invoke "as-call_indirect-func") (i32.const 4))
+(assert_return (invoke "as-call_indirect-first") (i32.const 4))
+(assert_return (invoke "as-call_indirect-mid") (i32.const 4))
+(assert_return (invoke "as-call_indirect-last") (i32.const 4))
