@@ -129,6 +129,16 @@ func Execute(stack *data.Stack[RuntimeValue], labels *data.Stack[int], expressio
             }
             labels.Pop()
 
+        case *core.SelectExpression:
+            c := stack.Pop()
+
+            v1 := stack.Pop()
+            v2 := stack.Pop()
+            if c.I32 != 0 {
+                stack.Push(v1)
+            } else {
+                stack.Push(v2)
+            }
         case *core.I32ConstExpression:
             expr := current.(*core.I32ConstExpression)
             stack.Push(RuntimeValue{

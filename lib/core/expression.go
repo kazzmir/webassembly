@@ -271,6 +271,13 @@ func (expr *GlobalSetExpression) ConvertToWat(labels data.Stack[int], indents st
     return fmt.Sprintf("global.set %v", expr.Global.Id)
 }
 
+type SelectExpression struct {
+}
+
+func (expr *SelectExpression) ConvertToWat(labels data.Stack[int], indents string) string {
+    return "select"
+}
+
 type BlockKind int
 const (
     BlockKindBlock = iota

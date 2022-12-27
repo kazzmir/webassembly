@@ -111,6 +111,14 @@ func MakeExpressions(module WebAssemblyModule, expr *sexp.SExpression) []Express
                     Kind: BlockKindIf,
                     ExpectedType: expectedType,
                 })
+        case "select":
+            var out []Expression
+
+            for _, child := range expr.Children {
+                out = append(out, MakeExpressions(module, child)...)
+            }
+
+            return append(out, &SelectExpression{})
         case "br":
             label, err := strconv.Atoi(expr.Children[0].Value)
             if err != nil {

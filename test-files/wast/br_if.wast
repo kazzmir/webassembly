@@ -123,7 +123,18 @@
 
   (func (export "as-select-first") (param i32) (result i32)
      (block (result i32)
-       (select (br_if 0 (i32.const 3) (i32.const 10)) (i32.const 2) (local.get 0))))
+       (select
+         (br_if 0 (i32.const 3) (i32.const 10))
+         (i32.const 2)
+         (local.get 0))))
+
+  (func (export "as-select-second") (param i32) (result i32)
+    (block (result i32)
+       (select (i32.const 1) (br_if 0 (i32.const 3) (i32.const 10)) (local.get 0))))
+
+  (func (export "as-select-cond") (result i32)
+     (block (result i32)
+        (select (i32.const 1) (i32.const 2) (br_if 0 (i32.const 3) (i32.const 10)))))
 
 )
 
@@ -189,3 +200,6 @@
 (assert_return (invoke "as-select-first" (i32.const 0)) (i32.const 3))
 (assert_return (invoke "as-select-first" (i32.const 1)) (i32.const 3))
 
+(assert_return (invoke "as-select-second" (i32.const 0)) (i32.const 3))
+(assert_return (invoke "as-select-second" (i32.const 1)) (i32.const 3))
+(assert_return (invoke "as-select-cond") (i32.const 3))
