@@ -142,6 +142,8 @@ func Execute(stack *data.Stack[RuntimeValue], labels *data.Stack[int], expressio
                 Kind: RuntimeValueI32,
                 I32: arg1.I32 + arg2.I32,
             })
+        case *core.DropExpression:
+            stack.Pop()
         case *core.ReturnExpression:
             return 0, ReturnLabel, nil
         case *core.BranchExpression:
