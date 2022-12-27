@@ -208,7 +208,12 @@ func MakeExpressions(module WebAssemblyModule, expr *sexp.SExpression) []Express
                 return nil
             }
 
-            return []Expression{&CallExpression{Index: &FunctionIndex{uint32(index)}}}
+            var out []Expression
+            for _, child := range expr.Children[1:] {
+                out = append(out, MakeExpressions(module, child)...)
+            }
+
+            return append(out, &CallExpression{Index: &FunctionIndex{uint32(index)}})
         case "drop":
             argument := MakeExpressions(module, expr.Children[0])
             return append(argument, &DropExpression{})

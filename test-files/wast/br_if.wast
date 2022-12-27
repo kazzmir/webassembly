@@ -136,6 +136,29 @@
      (block (result i32)
         (select (i32.const 1) (i32.const 2) (br_if 0 (i32.const 3) (i32.const 10)))))
 
+  (func $f (param i32 i32 i32) (result i32) (i32.const -1))
+  (func (export "as-call-first") (result i32)
+    (block (result i32)
+      (call $f
+        (br_if 0 (i32.const 12) (i32.const 1))
+        (i32.const 2)
+        (i32.const 3))))
+
+  (func (export "as-call-mid") (result i32)
+     (block (result i32)
+       (call $f
+         (i32.const 1)
+         (br_if 0 (i32.const 13) (i32.const 1))
+         (i32.const 3))))
+
+  (func (export "as-call-last") (result i32)
+     (block (result i32)
+       (call $f
+         (i32.const 1)
+         (i32.const 2)
+         (br_if 0 (i32.const 14) (i32.const 1)))))
+
+
 )
 
 (assert_return (invoke "type-i32"))
@@ -203,3 +226,8 @@
 (assert_return (invoke "as-select-second" (i32.const 0)) (i32.const 3))
 (assert_return (invoke "as-select-second" (i32.const 1)) (i32.const 3))
 (assert_return (invoke "as-select-cond") (i32.const 3))
+
+(assert_return (invoke "as-call-first") (i32.const 12))
+(assert_return (invoke "as-call-mid") (i32.const 13))
+(assert_return (invoke "as-call-last") (i32.const 14))
+
