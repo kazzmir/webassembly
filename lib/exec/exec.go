@@ -78,13 +78,25 @@ func Execute(stack *data.Stack[RuntimeValue], labels *data.Stack[int], expressio
         case *core.BlockExpression:
             block := current.(*core.BlockExpression)
 
+            instructions := block.Instructions
+
+            /* for an if block, pop a value off the stack and if its not 0 then execute the normal instructions,
+             * otherwise execute the else instructions.
+             */
+            if block.Kind == core.BlockKindIf {
+                value := stack.Pop()
+                if value.I32 == 0 {
+                    instructions = block.ElseInstructions
+                }
+            }
+
             /* Keep track of the number of values on the stack in case they need to be popped off later */
             labels.Push(stack.Size())
             local := 0
-            for local < len(block.Instructions) {
+            for local < len(instructions) {
                 var branch int
                 var err error
-                local, branch, err = Execute(stack, labels, block.Instructions, local, frame)
+                local, branch, err = Execute(stack, labels, instructions, local, frame)
                 if err != nil {
                     return 0, 0, err
                 }

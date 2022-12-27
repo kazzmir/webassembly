@@ -77,6 +77,40 @@ func MakeExpressions(module WebAssemblyModule, expr *sexp.SExpression) []Express
                     ExpectedType: expectedType,
                 },
             }
+        case "if":
+            var out []Expression
+            var expectedType []ValueType
+
+            var thenInstructions []Expression
+            var elseInstructions []Expression
+
+            for _, child := range expr.Children {
+                if child.Name == "result" {
+                    for _, result := range child.Children {
+                        expectedType = append(expectedType, ValueTypeFromName(result.Value))
+                    }
+                    continue
+                }
+
+                if child.Name == "then" {
+                    for _, then := range child.Children {
+                        thenInstructions = append(thenInstructions, MakeExpressions(module, then)...)
+                    }
+                } else if child.Name == "else" {
+                    for _, expr := range child.Children {
+                        elseInstructions = append(elseInstructions, MakeExpressions(module, expr)...)
+                    }
+                } else {
+                    out = append(out, MakeExpressions(module, child)...)
+                }
+            }
+
+            return append(out, &BlockExpression{
+                    Instructions: thenInstructions,
+                    ElseInstructions: elseInstructions,
+                    Kind: BlockKindIf,
+                    ExpectedType: expectedType,
+                })
         case "br":
             label, err := strconv.Atoi(expr.Children[0].Value)
             if err != nil {

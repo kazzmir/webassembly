@@ -281,6 +281,7 @@ const (
 type BlockExpression struct {
     Expression
     Instructions []Expression
+    ElseInstructions []Expression // for if-then-else
     Kind BlockKind
     ExpectedType []ValueType
 }
