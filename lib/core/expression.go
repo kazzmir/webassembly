@@ -23,6 +23,8 @@ func (code *Code) ConvertToWat(indents string) string {
     var out strings.Builder
 
     var labelStack data.Stack[int]
+    /* the function implicitly creates a label */
+    labelStack.Push(0)
 
     if len(code.Locals) > 0 {
         out.WriteString(indents)
@@ -89,6 +91,10 @@ type BranchIfExpression struct {
 }
 
 func (expr *BranchIfExpression) ConvertToWat(labels data.Stack[int], indents string) string {
+    if int(expr.Label) > labels.Size() {
+        return fmt.Sprintf("invalid label %v", expr.Label)
+    }
+
     return fmt.Sprintf("br_if %v (;@%v;)", expr.Label, labels.Get(expr.Label))
 }
 

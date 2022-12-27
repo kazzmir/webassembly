@@ -56,6 +56,21 @@
   (func (export "as-block-last-value") (param i32) (result i32)
       (block (result i32)
       (call $dummy) (call $dummy) (br_if 0 (i32.const 11) (local.get 0))))
+
+  (func (export "as-loop-first") (param i32) (result i32)
+      (block (loop (br_if 1 (local.get 0)) (return (i32.const 2)))) (i32.const 3)
+  )
+
+  (func (export "as-loop-mid") (param i32) (result i32)
+    (block (loop (call $dummy) (br_if 1 (local.get 0)) (return (i32.const 2))))
+    (i32.const 4))
+
+  (func (export "as-loop-last") (param i32)
+    (loop (call $dummy) (br_if 1 (local.get 0))))
+
+  (func (export "as-br-value") (result i32)
+    (block (result i32) (br 0 (br_if 0 (i32.const 1) (i32.const 2)))))
+
 )
 
 (assert_return (invoke "type-i32"))
@@ -82,3 +97,13 @@
 (assert_return (invoke "as-block-mid-value" (i32.const 1)) (i32.const 20))
 (assert_return (invoke "as-block-last-value" (i32.const 0)) (i32.const 11))
 (assert_return (invoke "as-block-last-value" (i32.const 1)) (i32.const 11))
+
+(assert_return (invoke "as-loop-first" (i32.const 0)) (i32.const 2))
+(assert_return (invoke "as-loop-first" (i32.const 1)) (i32.const 3))
+
+(assert_return (invoke "as-loop-mid" (i32.const 0)) (i32.const 2))
+(assert_return (invoke "as-loop-mid" (i32.const 1)) (i32.const 4))
+(assert_return (invoke "as-loop-last" (i32.const 0)))
+(assert_return (invoke "as-loop-last" (i32.const 1)))
+
+(assert_return (invoke "as-br-value") (i32.const 1))

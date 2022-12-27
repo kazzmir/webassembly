@@ -106,6 +106,12 @@ func Execute(stack *data.Stack[RuntimeValue], labels *data.Stack[int], expressio
                         return instruction+1, branch, nil
                     }
 
+                    /* go back to the same block instruction if we are branching to this loop */
+                    if branch == 1 && block.Kind == core.BlockKindLoop {
+                        return instruction, 0, nil
+                    }
+
+                    /* otherwise go to the instruction after this block */
                     return instruction+1, branch-1, nil
                 }
             }
@@ -242,6 +248,12 @@ func RunCode(code core.Code, frame Frame) (RuntimeValue, error) {
             return RuntimeValue{}, err
         }
         if branch == ReturnLabel {
+            return stack.Pop(), nil
+        }
+        /* if we a branch was executed to label 0, then the 'branch' variable will be equal to 1,
+         * which has the same meaning as the end of the function
+         */
+        if branch == 1 {
             return stack.Pop(), nil
         }
         if branch != 0 {

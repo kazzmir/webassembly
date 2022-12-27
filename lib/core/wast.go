@@ -53,7 +53,7 @@ func MakeFunctionType(function *sexp.SExpression) WebAssemblyFunction {
 
 func MakeExpressions(module WebAssemblyModule, expr *sexp.SExpression) []Expression {
     switch expr.Name {
-        case "block":
+        case "block", "loop":
             var children []Expression
             var expectedType []ValueType
             for _, child := range expr.Children {
@@ -66,9 +66,14 @@ func MakeExpressions(module WebAssemblyModule, expr *sexp.SExpression) []Express
                 children = append(children, MakeExpressions(module, child)...)
             }
 
+            var kind BlockKind = BlockKindBlock
+            if expr.Name == "loop" {
+                kind = BlockKindLoop
+            }
+
             return []Expression{&BlockExpression{
                     Instructions: children,
-                    Kind: BlockKindBlock,
+                    Kind: kind,
                     ExpectedType: expectedType,
                 },
             }
