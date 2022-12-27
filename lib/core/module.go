@@ -641,6 +641,13 @@ func (section *WebAssemblyImportSection) AddImport(moduleName string, name strin
 
 type WebAssemblyTypeSection struct {
     Functions []WebAssemblyFunction
+    Associated map[string]*TypeIndex
+}
+
+func NewWebAssemblyTypeSection() *WebAssemblyTypeSection {
+    return &WebAssemblyTypeSection{
+        Associated: make(map[string]*TypeIndex),
+    }
 }
 
 func (section *WebAssemblyTypeSection) ToInterface() WebAssemblySection {
@@ -664,7 +671,15 @@ func (section *WebAssemblyTypeSection) AddFunctionType(function WebAssemblyFunct
 
 /* associate the given name to the given type index */
 func (section *WebAssemblyTypeSection) AssociateName(name string, index *TypeIndex){
-    // TODO
+    section.Associated[name] = index
+}
+
+func (section *WebAssemblyTypeSection) GetTypeByName(name string) *TypeIndex {
+    out, ok := section.Associated[name]
+    if ok {
+        return out
+    }
+    return nil
 }
 
 /* adds the function type to the list of function types and returns its index, or
@@ -759,8 +774,16 @@ func (module *WebAssemblyModule) GetFunctionSection() *WebAssemblyFunctionSectio
     return findSection[*WebAssemblyFunctionSection](module.Sections)
 }
 
+func (module *WebAssemblyModule) GetTableSection() *WebAssemblyTableSection {
+    return findSection[*WebAssemblyTableSection](module.Sections)
+}
+
 func (module *WebAssemblyModule) GetTypeSection() *WebAssemblyTypeSection {
     return findSection[*WebAssemblyTypeSection](module.Sections)
+}
+
+func (module *WebAssemblyModule) GetElementSection() *WebAssemblyElementSection {
+    return findSection[*WebAssemblyElementSection](module.Sections)
 }
 
 func (module *WebAssemblyModule) GetFunction(index uint32) WebAssemblyFunction {

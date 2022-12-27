@@ -40,6 +40,44 @@ func (value RuntimeValue) String() string {
     return "?"
 }
 
+type Table struct {
+    Elements []core.Index
+}
+
+type Store struct {
+    Tables []Table
+}
+
+func InitializeStore(module core.WebAssemblyModule) *Store {
+    var out Store
+
+    tableSection := module.GetTableSection()
+    if tableSection != nil {
+        for _, table := range tableSection.Items {
+            out.Tables = append(out.Tables, Table{Elements: make([]core.Index, table.Limit.Minimum)})
+        }
+    }
+
+    elementSection := module.GetElementSection()
+    if elementSection != nil {
+        for _, element := range elementSection.Elements {
+            switch element.Mode.(type) {
+                case *core.ElementModeActive:
+                    active := element.Mode.(*core.ElementModeActive)
+                    for i, item := range element.Inits {
+                        switch item.(type) {
+                            case *core.RefFuncExpression:
+                                function := item.(*core.RefFuncExpression)
+                                out.Tables[active.Table].Elements[i] = function.Function
+                        }
+                    }
+            }
+        }
+    }
+
+    return &out
+}
+
 /* activation frame: https://webassembly.github.io/spec/core/exec/runtime.html#syntax-frame */
 type Frame struct {
     Locals []RuntimeValue
@@ -57,7 +95,7 @@ const ReturnLabel int = 1<<30
  *  input: stack of runtime values, stack of block labels, list of expressions to execute, instruction index into 'expressions', activation frame
  *  output: next instruction number to execute, number of blocks to skip (if greater than 0), and any errors that may occur (including traps)
  */
-func Execute(stack *data.Stack[RuntimeValue], labels *data.Stack[int], expressions []core.Expression, instruction int, frame Frame) (int, int, error) {
+func Execute(stack *data.Stack[RuntimeValue], labels *data.Stack[int], expressions []core.Expression, instruction int, frame Frame, store *Store) (int, int, error) {
     current := expressions[instruction]
 
     // fmt.Printf("Stack is now %+v\n", *stack)
@@ -96,7 +134,7 @@ func Execute(stack *data.Stack[RuntimeValue], labels *data.Stack[int], expressio
             for local < len(instructions) {
                 var branch int
                 var err error
-                local, branch, err = Execute(stack, labels, instructions, local, frame)
+                local, branch, err = Execute(stack, labels, instructions, local, frame, store)
                 if err != nil {
                     return 0, 0, err
                 }
@@ -240,7 +278,7 @@ func Execute(stack *data.Stack[RuntimeValue], labels *data.Stack[int], expressio
             out, err := RunCode(code, Frame{
                 Locals: args,
                 Module: frame.Module,
-            })
+            }, store)
 
             if err != nil {
                 return 0, 0, err
@@ -260,7 +298,7 @@ func EvaluateOne(expression core.Expression) (RuntimeValue, error) {
     var stack data.Stack[RuntimeValue]
     var labels data.Stack[int]
 
-    _, _, err := Execute(&stack, &labels, []core.Expression{expression}, 0, Frame{})
+    _, _, err := Execute(&stack, &labels, []core.Expression{expression}, 0, Frame{}, nil)
     if err != nil {
         return RuntimeValue{}, err
     }
@@ -275,7 +313,7 @@ func EvaluateOne(expression core.Expression) (RuntimeValue, error) {
 
 /* evaluate an entire function
  */
-func RunCode(code core.Code, frame Frame) (RuntimeValue, error) {
+func RunCode(code core.Code, frame Frame, store *Store) (RuntimeValue, error) {
     var stack data.Stack[RuntimeValue]
     var labels data.Stack[int]
 
@@ -284,7 +322,7 @@ func RunCode(code core.Code, frame Frame) (RuntimeValue, error) {
     for instruction < len(code.Expressions) {
         var branch int
         var err error
-        instruction, branch, err = Execute(&stack, &labels, code.Expressions, instruction, frame)
+        instruction, branch, err = Execute(&stack, &labels, code.Expressions, instruction, frame, store)
         if err != nil {
             return RuntimeValue{}, err
         }
@@ -311,7 +349,7 @@ func RunCode(code core.Code, frame Frame) (RuntimeValue, error) {
 }
 
 /* invoke an exported function in the given module */
-func Invoke(module core.WebAssemblyModule, name string, args []RuntimeValue) (RuntimeValue, error) {
+func Invoke(module core.WebAssemblyModule, store *Store, name string, args []RuntimeValue) (RuntimeValue, error) {
     kind := module.GetExportSection().FindExportByName(name)
     if kind == nil {
         return RuntimeValue{}, fmt.Errorf("no such exported function '%v'", name)
@@ -324,7 +362,7 @@ func Invoke(module core.WebAssemblyModule, name string, args []RuntimeValue) (Ru
             Locals: args,
             Module: module,
         }
-        return RunCode(code, frame)
+        return RunCode(code, frame, store)
     } else {
         return RuntimeValue{}, fmt.Errorf("no such exported function '%v'", name)
     }
@@ -354,7 +392,9 @@ func AssertReturn(module core.WebAssemblyModule, assert sexp.SExpression) error 
             args = append(args, nextArg)
         }
 
-        result, err := Invoke(module, functionName, args)
+        store := InitializeStore(module)
+
+        result, err := Invoke(module, store, functionName, args)
         if err != nil {
             return err
         }

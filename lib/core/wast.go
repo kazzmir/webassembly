@@ -200,6 +200,34 @@ func MakeExpressions(module WebAssemblyModule, expr *sexp.SExpression) []Express
             arg2 := MakeExpressions(module, expr.Children[1])
             out := append(arg1, arg2...)
             return append(out, &I32AddExpression{})
+        case "call_indirect":
+            var typeIndex *TypeIndex
+            tableId := 0
+            typeStart := 0
+
+            if expr.Children[0].Value != "" {
+                value, err := strconv.Atoi(expr.Children[0].Value)
+                if err != nil {
+                    return nil
+                }
+
+                tableId = value
+                typeStart = 1
+            }
+
+            type_ := expr.Children[typeStart]
+            typeIndex = module.GetTypeSection().GetTypeByName(type_.Children[0].Value)
+
+            var out []Expression
+            for _, child := range expr.Children[typeStart+1:] {
+                out = append(out, MakeExpressions(module, child)...)
+            }
+
+            return append(out, &CallIndirectExpression{
+                Index: typeIndex,
+                Table: &TableIndex{Id: uint32(tableId)},
+            })
+
         case "call":
             name := expr.Children[0].Value
             index, ok := module.GetFunctionSection().GetFunctionIndexByName(name)
@@ -308,7 +336,7 @@ func (wast *Wast) CreateWasmModule() (WebAssemblyModule, error) {
     }
 
     var moduleOut WebAssemblyModule
-    typeSection := new(WebAssemblyTypeSection)
+    typeSection := NewWebAssemblyTypeSection()
     functionSection := WebAssemblyFunctionSectionCreate()
     codeSection := new(WebAssemblyCodeSection)
     tableSection := new(WebAssemblyTableSection)
