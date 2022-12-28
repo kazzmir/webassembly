@@ -225,6 +225,13 @@ func MakeExpressions(module WebAssemblyModule, expr *sexp.SExpression) []Express
             }
             return append(out, &I32NeExpression{})
 
+        case "memory.grow":
+            var out []Expression
+            for _, child := range expr.Children {
+                out = append(out, MakeExpressions(module, child)...)
+            }
+            return append(out, &MemoryGrowExpression{})
+
         case "call_indirect":
             var typeIndex *TypeIndex
             tableId := 0

@@ -241,6 +241,75 @@
   (func (export "as-compare-right") (result i32)
     (block (result i32) (i32.ne (i32.const 10) (br_if 0 (i32.const 1) (i32.const 42)))))
 
+  (func (export "as-memory.grow-size") (result i32)
+     (block (result i32) (memory.grow (br_if 0 (i32.const 1) (i32.const 1)))))
+
+  (func (export "nested-block-value") (param i32) (result i32)
+    (i32.add
+      (i32.const 1)
+      (block (result i32)
+       (drop (i32.const 2))
+       (i32.add
+       (i32.const 4)
+       (block (result i32)
+         (drop (br_if 1 (i32.const 8) (local.get 0)))
+         (i32.const 16))))))
+
+  (func (export "nested-br-value") (param i32) (result i32)
+    (i32.add
+    (i32.const 1)
+    (block (result i32)
+    (drop (i32.const 2))
+      (br 0
+        (block (result i32)
+          (drop (br_if 1 (i32.const 8) (local.get 0))) (i32.const 4)))
+      (i32.const 16))))
+
+  (func (export "nested-br_if-value") (param i32) (result i32)
+   (i32.add
+   (i32.const 1)
+   (block (result i32)
+     (drop (i32.const 2))
+     (drop (br_if 0
+       (block (result i32)
+       (drop (br_if 1 (i32.const 8) (local.get 0))) (i32.const 4))
+       (i32.const 1)))
+     (i32.const 16))))
+
+  (func (export "nested-br_if-value-cond") (param i32) (result i32)
+    (i32.add
+    (i32.const 1)
+    (block (result i32)
+      (drop (i32.const 2))
+      (drop (br_if 0
+      (i32.const 4)
+      (block (result i32)
+             (drop (br_if 1 (i32.const 8) (local.get 0))) (i32.const 1))))
+      (i32.const 16))))
+
+  (func (export "nested-br_table-value") (param i32) (result i32)
+    (i32.add
+      (i32.const 1)
+      (block (result i32)
+        (drop (i32.const 2))
+        (br_table 0
+           (block (result i32)
+                  (drop (br_if 1 (i32.const 8) (local.get 0))) (i32.const 4))
+           (i32.const 1))
+        (i32.const 16))))
+
+   (func (export "nested-br_table-value-index") (param i32) (result i32)
+     (i32.add
+       (i32.const 1)
+       (block (result i32)
+              (drop (i32.const 2))
+              (br_table 0
+                        (i32.const 4)
+                        (block (result i32)
+                               (drop (br_if 1 (i32.const 8) (local.get 0))) (i32.const 1)))
+              (i32.const 16))))
+
+
 )
 
 (assert_return (invoke "type-i32"))
@@ -341,3 +410,18 @@
 (assert_return (invoke "as-test-operand") (i32.const 0))
 (assert_return (invoke "as-compare-left") (i32.const 1))
 (assert_return (invoke "as-compare-right") (i32.const 1))
+(assert_return (invoke "as-memory.grow-size") (i32.const 1))
+(assert_return (invoke "nested-block-value" (i32.const 0)) (i32.const 21))
+(assert_return (invoke "nested-block-value" (i32.const 1)) (i32.const 9))
+(assert_return (invoke "nested-br-value" (i32.const 0)) (i32.const 5))
+(assert_return (invoke "nested-br-value" (i32.const 1)) (i32.const 9))
+(assert_return (invoke "nested-br_if-value" (i32.const 0)) (i32.const 5))
+(assert_return (invoke "nested-br_if-value" (i32.const 1)) (i32.const 9))
+
+(assert_return (invoke "nested-br_if-value-cond" (i32.const 0)) (i32.const 5))
+(assert_return (invoke "nested-br_if-value-cond" (i32.const 1)) (i32.const 9))
+
+(assert_return (invoke "nested-br_table-value" (i32.const 0)) (i32.const 5))
+(assert_return (invoke "nested-br_table-value" (i32.const 1)) (i32.const 9))
+(assert_return (invoke "nested-br_table-value-index" (i32.const 0)) (i32.const 5))
+(assert_return (invoke "nested-br_table-value-index" (i32.const 1)) (i32.const 9))

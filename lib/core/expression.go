@@ -269,6 +269,13 @@ func (expr *I32MulExpression) ConvertToWat(labels data.Stack[int], indents strin
     return "i32.mul"
 }
 
+type MemoryGrowExpression struct {
+}
+
+func (expr *MemoryGrowExpression) ConvertToWat(labels data.Stack[int], indents string) string {
+    return "memory.grow"
+}
+
 type LocalGetExpression struct {
     Local uint32
 }
