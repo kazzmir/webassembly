@@ -219,6 +219,14 @@ func (expr *LocalGetExpression) ConvertToWat(labels data.Stack[int], indents str
     return fmt.Sprintf("local.get %v", expr.Local)
 }
 
+type LocalTeeExpression struct {
+    Local uint32
+}
+
+func (expr *LocalTeeExpression) ConvertToWat(labels data.Stack[int], indents string) string {
+    return fmt.Sprintf("local.tee %v", expr.Local)
+}
+
 type ReturnExpression struct {
 }
 

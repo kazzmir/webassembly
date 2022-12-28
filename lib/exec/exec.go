@@ -268,6 +268,17 @@ func Execute(stack *data.Stack[RuntimeValue], labels *data.Stack[int], expressio
                 return 0, 0, fmt.Errorf("unable to get local %v when frame has %v locals", expr.Local, len(frame.Locals))
             }
             stack.Push(frame.Locals[expr.Local])
+        case *core.LocalTeeExpression:
+            expr := current.(*core.LocalTeeExpression)
+
+            if len(frame.Locals) <= int(expr.Local) {
+                return 0, 0, fmt.Errorf("unable to tee local %v when frame has %v locals", expr.Local, len(frame.Locals))
+            }
+            value := stack.Pop()
+            stack.Push(frame.Locals[expr.Local])
+            stack.Push(frame.Locals[expr.Local])
+            frame.Locals[expr.Local] = value
+
         case *core.LocalSetExpression:
             expr := current.(*core.LocalSetExpression)
 

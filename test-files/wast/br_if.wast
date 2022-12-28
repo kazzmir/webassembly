@@ -189,6 +189,13 @@
        (local.set 0 (br_if 0 (i32.const 17) (local.get 0)))
        (i32.const -1)))
 
+  (func (export "as-local.tee-value") (param i32) (result i32)
+     (block (result i32)
+       (local.tee 0 (br_if 0 (i32.const 1) (local.get 0)))
+       (return (i32.const -1))))
+
+
+
 )
 
 (assert_return (invoke "type-i32"))
@@ -269,3 +276,5 @@
 (assert_return (invoke "as-local.set-value" (i32.const 0)) (i32.const -1))
 (assert_return (invoke "as-local.set-value" (i32.const 1)) (i32.const 17))
 
+(assert_return (invoke "as-local.tee-value" (i32.const 0)) (i32.const -1))
+(assert_return (invoke "as-local.tee-value" (i32.const 1)) (i32.const 1))
