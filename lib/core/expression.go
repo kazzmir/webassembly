@@ -182,6 +182,13 @@ func (expr *I32AddExpression) ConvertToWat(labels data.Stack[int], indents strin
     return "i32.add"
 }
 
+type I64SubExpression struct {
+}
+
+func (expr *I64SubExpression) ConvertToWat(labels data.Stack[int], indents string) string {
+    return "i64.sub"
+}
+
 type I32SubExpression struct {
 }
 
@@ -255,6 +262,13 @@ func (expr *I32EqExpression) ConvertToWat(labels data.Stack[int], indents string
     return "i32.eq"
 }
 
+type I64EqExpression struct {
+}
+
+func (expr *I64EqExpression) ConvertToWat(labels data.Stack[int], indents string) string {
+    return "i64.eq"
+}
+
 type I32DivSignedExpression struct {
 }
 
@@ -267,6 +281,13 @@ type I32MulExpression struct {
 
 func (expr *I32MulExpression) ConvertToWat(labels data.Stack[int], indents string) string {
     return "i32.mul"
+}
+
+type I64MulExpression struct {
+}
+
+func (expr *I64MulExpression) ConvertToWat(labels data.Stack[int], indents string) string {
+    return "i64.mul"
 }
 
 type MemoryGrowExpression struct {

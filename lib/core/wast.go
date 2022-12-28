@@ -200,12 +200,25 @@ func MakeExpressions(module WebAssemblyModule, expr *sexp.SExpression) []Express
             arg2 := MakeExpressions(module, expr.Children[1])
             out := append(arg1, arg2...)
             return append(out, &I32AddExpression{})
+        case "i64.sub":
+            var out []Expression
+            for _, child := range expr.Children {
+                out = append(out, MakeExpressions(module, child)...)
+            }
+            return append(out, &I64SubExpression{})
         case "i32.sub":
             var out []Expression
             for _, child := range expr.Children {
                 out = append(out, MakeExpressions(module, child)...)
             }
             return append(out, &I32SubExpression{})
+        case "i64.eq":
+            var out []Expression
+            for _, child := range expr.Children {
+                out = append(out, MakeExpressions(module, child)...)
+            }
+            return append(out, &I64EqExpression{})
+
         case "i32.eqz":
             var out []Expression
             for _, child := range expr.Children {
@@ -224,7 +237,12 @@ func MakeExpressions(module WebAssemblyModule, expr *sexp.SExpression) []Express
                 out = append(out, MakeExpressions(module, child)...)
             }
             return append(out, &I32NeExpression{})
-
+        case "i64.mul":
+            var out []Expression
+            for _, child := range expr.Children {
+                out = append(out, MakeExpressions(module, child)...)
+            }
+            return append(out, &I64MulExpression{})
         case "memory.grow":
             var out []Expression
             for _, child := range expr.Children {
@@ -262,10 +280,18 @@ func MakeExpressions(module WebAssemblyModule, expr *sexp.SExpression) []Express
 
         case "call":
             name := expr.Children[0].Value
-            index, ok := module.GetFunctionSection().GetFunctionIndexByName(name)
-            if !ok {
-                fmt.Printf("Unknown function in call '%v'\n", name)
-                return nil
+
+            var index int
+            value, err := strconv.Atoi(name)
+            if err == nil {
+                index = value
+            } else {
+                var ok bool
+                index, ok = module.GetFunctionSection().GetFunctionIndexByName(name)
+                if !ok {
+                    fmt.Printf("Unknown function in call '%v'\n", name)
+                    return nil
+                }
             }
 
             var out []Expression

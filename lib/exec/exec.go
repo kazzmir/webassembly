@@ -168,6 +168,9 @@ func Execute(stack *data.Stack[RuntimeValue], labels *data.Stack[int], expressio
              */
             if block.Kind == core.BlockKindIf {
                 value := stack.Pop()
+                if value.Kind != RuntimeValueI32 {
+                    return 0, 0, fmt.Errorf("if expected an i32 on the stack but got %v", value)
+                }
                 if value.I32 == 0 {
                     instructions = block.ElseInstructions
                 }
@@ -258,8 +261,36 @@ func Execute(stack *data.Stack[RuntimeValue], labels *data.Stack[int], expressio
             arg2 := stack.Pop()
             stack.Push(RuntimeValue{
                 Kind: RuntimeValueI32,
-                I32: arg1.I32 - arg2.I32,
+                I32: arg2.I32 - arg1.I32,
             })
+        case *core.I64SubExpression:
+            arg1 := stack.Pop()
+            arg2 := stack.Pop()
+            stack.Push(RuntimeValue{
+                Kind: RuntimeValueI64,
+                I64: arg2.I64 - arg1.I64,
+            })
+        case *core.I64MulExpression:
+            arg1 := stack.Pop()
+            arg2 := stack.Pop()
+            stack.Push(RuntimeValue{
+                Kind: RuntimeValueI64,
+                I64: arg1.I64 * arg2.I64,
+            })
+        case *core.I64EqExpression:
+            arg1 := stack.Pop()
+            arg2 := stack.Pop()
+            if arg1.I64 == arg2.I64 {
+                stack.Push(RuntimeValue{
+                    Kind: RuntimeValueI32,
+                    I32: 1,
+                })
+            } else {
+                stack.Push(RuntimeValue{
+                    Kind: RuntimeValueI32,
+                    I32: 0,
+                })
+            }
         case *core.DropExpression:
             stack.Pop()
         case *core.ReturnExpression:
