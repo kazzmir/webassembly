@@ -183,6 +183,11 @@
          (call_indirect (type $check)
             (i32.const 1) (i32.const 2) (i32.const 3) (br_if 0 (i32.const 4) (i32.const 10)))))
 
+  (func (export "as-local.set-value") (param i32) (result i32)
+     (local i32)
+     (block (result i32)
+       (local.set 0 (br_if 0 (i32.const 17) (local.get 0)))
+       (i32.const -1)))
 
 )
 
@@ -260,3 +265,7 @@
 (assert_return (invoke "as-call_indirect-first") (i32.const 4))
 (assert_return (invoke "as-call_indirect-mid") (i32.const 4))
 (assert_return (invoke "as-call_indirect-last") (i32.const 4))
+
+(assert_return (invoke "as-local.set-value" (i32.const 0)) (i32.const -1))
+(assert_return (invoke "as-local.set-value" (i32.const 1)) (i32.const 17))
+

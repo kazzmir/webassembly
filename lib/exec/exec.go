@@ -268,6 +268,15 @@ func Execute(stack *data.Stack[RuntimeValue], labels *data.Stack[int], expressio
                 return 0, 0, fmt.Errorf("unable to get local %v when frame has %v locals", expr.Local, len(frame.Locals))
             }
             stack.Push(frame.Locals[expr.Local])
+        case *core.LocalSetExpression:
+            expr := current.(*core.LocalSetExpression)
+
+            if len(frame.Locals) <= int(expr.Local) {
+                return 0, 0, fmt.Errorf("unable to set local %v when frame has %v locals", expr.Local, len(frame.Locals))
+            }
+            value := stack.Pop()
+            frame.Locals[expr.Local] = value
+
         case *core.CallExpression:
             /* create a new stack frame, pop N values off the stack and put them in the locals of the frame.
              * then invoke the code of the function with the new frame.

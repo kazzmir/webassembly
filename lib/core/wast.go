@@ -284,6 +284,18 @@ func MakeExpressions(module WebAssemblyModule, expr *sexp.SExpression) []Express
             }
 
             return []Expression{&LocalGetExpression{Local: uint32(index)}}
+        case "local.set":
+            index, err := strconv.Atoi(expr.Children[0].Value)
+            if err != nil {
+                return nil
+            }
+
+            var out []Expression
+            if len(expr.Children) > 1 {
+                out = MakeExpressions(module, expr.Children[1])
+            }
+
+            return append(out, &LocalSetExpression{Local: uint32(index)})
 
     }
 
