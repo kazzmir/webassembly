@@ -182,6 +182,13 @@ func (expr *I32AddExpression) ConvertToWat(labels data.Stack[int], indents strin
     return "i32.add"
 }
 
+type I32SubExpression struct {
+}
+
+func (expr *I32SubExpression) ConvertToWat(labels data.Stack[int], indents string) string {
+    return "i32.sub"
+}
+
 /* FIXME: generalize these load expression types */
 type I32Load8sExpression struct {
     Memory MemoryArgument
@@ -198,12 +205,47 @@ func (expr *I32StoreExpression) ConvertToWat(labels data.Stack[int], indents str
     return "i32.store"
 }
 
+type I32Store8Expression struct {
+}
+
+func (expr *I32Store8Expression) ConvertToWat(labels data.Stack[int], indents string) string {
+    return "i32.store8"
+}
+
+type I32Store16Expression struct {
+}
+
+func (expr *I32Store16Expression) ConvertToWat(labels data.Stack[int], indents string) string {
+    return "i32.store16"
+}
+
 type I32LoadExpression struct {
     Memory MemoryArgument
 }
 
 func (expr *I32LoadExpression) ConvertToWat(labels data.Stack[int], indents string) string {
     return "i32.load"
+}
+
+type I32EqzExpression struct {
+}
+
+func (expr *I32EqzExpression) ConvertToWat(labels data.Stack[int], indents string) string {
+    return "i32.eqz"
+}
+
+type I32LeuExpression struct {
+}
+
+func (expr *I32LeuExpression) ConvertToWat(labels data.Stack[int], indents string) string {
+    return "i32.le_u"
+}
+
+type I32NeExpression struct {
+}
+
+func (expr *I32NeExpression) ConvertToWat(labels data.Stack[int], indents string) string {
+    return "i32.ne"
 }
 
 type I32EqExpression struct {

@@ -211,6 +211,36 @@
     (block (result i32)
       (i32.store (br_if 0 (i32.const 30) (i32.const 1)) (i32.const 7)) (i32.const -1)))
 
+  (func (export "as-store-value") (result i32)
+    (block (result i32)
+      (i32.store (i32.const 2) (br_if 0 (i32.const 31) (i32.const 1))) (i32.const -1)))
+
+  (func (export "as-storeN-address") (result i32)
+    (block (result i32)
+      (i32.store8 (br_if 0 (i32.const 32) (i32.const 1)) (i32.const 7)) (i32.const -1)))
+
+  (func (export "as-storeN-value") (result i32)
+    (block (result i32)
+      (i32.store16 (i32.const 2) (br_if 0 (i32.const 33) (i32.const 1))) (i32.const -1)))
+
+  (func (export "as-unary-operand") (result f64)
+    (block (result f64) (f64.neg (br_if 0 (f64.const 1.0) (i32.const 1)))))
+
+  (func (export "as-binary-left") (result i32)
+     (block (result i32) (i32.add (br_if 0 (i32.const 1) (i32.const 1)) (i32.const 10))))
+
+  (func (export "as-binary-right") (result i32)
+    (block (result i32) (i32.sub (i32.const 10) (br_if 0 (i32.const 1) (i32.const 1)))))
+
+  (func (export "as-test-operand") (result i32)
+    (block (result i32) (i32.eqz (br_if 0 (i32.const 0) (i32.const 1)))))
+
+  (func (export "as-compare-left") (result i32)
+    (block (result i32) (i32.le_u (br_if 0 (i32.const 1) (i32.const 1)) (i32.const 10))))
+
+  (func (export "as-compare-right") (result i32)
+    (block (result i32) (i32.ne (i32.const 10) (br_if 0 (i32.const 1) (i32.const 42)))))
+
 )
 
 (assert_return (invoke "type-i32"))
@@ -301,4 +331,13 @@
 (assert_return (invoke "as-loadN-address") (i32.const 30))
 
 (assert_return (invoke "as-store-address") (i32.const 30))
+(assert_return (invoke "as-store-value") (i32.const 31))
+(assert_return (invoke "as-storeN-address") (i32.const 32))
+(assert_return (invoke "as-storeN-value") (i32.const 33))
+(assert_return (invoke "as-unary-operand") (f64.const 1.0))
 
+(assert_return (invoke "as-binary-left") (i32.const 1))
+(assert_return (invoke "as-binary-right") (i32.const 1))
+(assert_return (invoke "as-test-operand") (i32.const 0))
+(assert_return (invoke "as-compare-left") (i32.const 1))
+(assert_return (invoke "as-compare-right") (i32.const 1))

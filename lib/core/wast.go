@@ -200,6 +200,31 @@ func MakeExpressions(module WebAssemblyModule, expr *sexp.SExpression) []Express
             arg2 := MakeExpressions(module, expr.Children[1])
             out := append(arg1, arg2...)
             return append(out, &I32AddExpression{})
+        case "i32.sub":
+            var out []Expression
+            for _, child := range expr.Children {
+                out = append(out, MakeExpressions(module, child)...)
+            }
+            return append(out, &I32SubExpression{})
+        case "i32.eqz":
+            var out []Expression
+            for _, child := range expr.Children {
+                out = append(out, MakeExpressions(module, child)...)
+            }
+            return append(out, &I32EqzExpression{})
+        case "i32.le_u":
+            var out []Expression
+            for _, child := range expr.Children {
+                out = append(out, MakeExpressions(module, child)...)
+            }
+            return append(out, &I32LeuExpression{})
+        case "i32.ne":
+            var out []Expression
+            for _, child := range expr.Children {
+                out = append(out, MakeExpressions(module, child)...)
+            }
+            return append(out, &I32NeExpression{})
+
         case "call_indirect":
             var typeIndex *TypeIndex
             tableId := 0
@@ -354,6 +379,22 @@ func MakeExpressions(module WebAssemblyModule, expr *sexp.SExpression) []Express
 
             // FIXME: handle memory argument alignment and offset
             return append(out, &I32StoreExpression{})
+        case "i32.store8":
+            var out []Expression
+            for _, child := range expr.Children {
+                out = append(out, MakeExpressions(module, child)...)
+            }
+
+            // FIXME: handle memory argument alignment and offset
+            return append(out, &I32Store8Expression{})
+        case "i32.store16":
+            var out []Expression
+            for _, child := range expr.Children {
+                out = append(out, MakeExpressions(module, child)...)
+            }
+
+            // FIXME: handle memory argument alignment and offset
+            return append(out, &I32Store16Expression{})
 
     }
 
