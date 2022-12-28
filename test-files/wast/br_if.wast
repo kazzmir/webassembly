@@ -207,6 +207,10 @@
   (func (export "as-loadN-address") (result i32)
     (block (result i32) (i32.load8_s (br_if 0 (i32.const 30) (i32.const 1)))))
 
+  (func (export "as-store-address") (result i32)
+    (block (result i32)
+      (i32.store (br_if 0 (i32.const 30) (i32.const 1)) (i32.const 7)) (i32.const -1)))
+
 )
 
 (assert_return (invoke "type-i32"))
@@ -295,3 +299,6 @@
 
 (assert_return (invoke "as-load-address") (i32.const 1))
 (assert_return (invoke "as-loadN-address") (i32.const 30))
+
+(assert_return (invoke "as-store-address") (i32.const 30))
+

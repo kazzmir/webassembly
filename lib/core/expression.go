@@ -191,6 +191,13 @@ func (expr *I32Load8sExpression) ConvertToWat(labels data.Stack[int], indents st
     return "i32.load8_s"
 }
 
+type I32StoreExpression struct {
+}
+
+func (expr *I32StoreExpression) ConvertToWat(labels data.Stack[int], indents string) string {
+    return "i32.store"
+}
+
 type I32LoadExpression struct {
     Memory MemoryArgument
 }

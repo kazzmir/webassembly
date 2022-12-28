@@ -346,6 +346,14 @@ func MakeExpressions(module WebAssemblyModule, expr *sexp.SExpression) []Express
 
             // FIXME: handle memory argument alignment and offset
             return append(out, &I32Load8sExpression{MemoryArgument{}})
+        case "i32.store":
+            var out []Expression
+            for _, child := range expr.Children {
+                out = append(out, MakeExpressions(module, child)...)
+            }
+
+            // FIXME: handle memory argument alignment and offset
+            return append(out, &I32StoreExpression{})
 
     }
 
