@@ -28,6 +28,17 @@ type RuntimeValue struct {
     F64 float64
 }
 
+func MakeRuntimeValue(kind core.ValueType) RuntimeValue {
+    switch kind {
+        case core.ValueTypeI32: return RuntimeValue{Kind: RuntimeValueI32}
+        case core.ValueTypeI64: return RuntimeValue{Kind: RuntimeValueI64}
+        case core.ValueTypeF32: return RuntimeValue{Kind: RuntimeValueF32}
+        case core.ValueTypeF64: return RuntimeValue{Kind: RuntimeValueF64}
+    }
+
+    return RuntimeValue{Kind: RuntimeValueNone}
+}
+
 func (value RuntimeValue) String() string {
     switch value.Kind {
         case RuntimeValueNone: return "none"
@@ -252,6 +263,7 @@ func Execute(stack *data.Stack[RuntimeValue], labels *data.Stack[int], expressio
             }
         case *core.LocalGetExpression:
             expr := current.(*core.LocalGetExpression)
+
             if len(frame.Locals) <= int(expr.Local) {
                 return 0, 0, fmt.Errorf("unable to get local %v when frame has %v locals", expr.Local, len(frame.Locals))
             }
@@ -274,6 +286,10 @@ func Execute(stack *data.Stack[RuntimeValue], labels *data.Stack[int], expressio
             }
 
             code := frame.Module.GetCodeSection().GetFunction(expr.Index.Id)
+
+            for _, local := range code.Locals {
+                args = append(args, MakeRuntimeValue(local.Type))
+            }
 
             out, err := RunCode(code, Frame{
                 Locals: args,
@@ -358,10 +374,16 @@ func Invoke(module core.WebAssemblyModule, store *Store, name string, args []Run
     function, ok := kind.(*core.FunctionIndex)
     if ok {
         code := module.GetCodeSection().GetFunction(function.Id)
+
+        for _, local := range code.Locals {
+            args = append(args, MakeRuntimeValue(local.Type))
+        }
+
         frame := Frame{
             Locals: args,
             Module: module,
         }
+
         return RunCode(code, frame, store)
     } else {
         return RuntimeValue{}, fmt.Errorf("no such exported function '%v'", name)
