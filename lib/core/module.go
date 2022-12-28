@@ -159,6 +159,11 @@ func (section *WebAssemblyGlobalSection) String() string {
 }
 
 type WebAssemblyMemorySection struct {
+    Memories []Limit
+}
+
+func (section *WebAssemblyMemorySection) AddMemory(limit Limit){
+    section.Memories = append(section.Memories, limit)
 }
 
 func (section *WebAssemblyMemorySection) ToInterface() WebAssemblySection {
@@ -791,6 +796,10 @@ func (module *WebAssemblyModule) GetTableSection() *WebAssemblyTableSection {
 
 func (module *WebAssemblyModule) GetTypeSection() *WebAssemblyTypeSection {
     return findSection[*WebAssemblyTypeSection](module.Sections)
+}
+
+func (module *WebAssemblyModule) GetMemorySection() *WebAssemblyMemorySection {
+    return findSection[*WebAssemblyMemorySection](module.Sections)
 }
 
 func (module *WebAssemblyModule) GetGlobalSection() *WebAssemblyGlobalSection {

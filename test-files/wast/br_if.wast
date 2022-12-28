@@ -200,6 +200,12 @@
         (global.set $a (br_if 0 (i32.const 1) (local.get 0)))
         (return (i32.const -1))))
 
+  (memory 1)
+  (func (export "as-load-address") (result i32)
+    (block (result i32) (i32.load (br_if 0 (i32.const 1) (i32.const 1)))))
+
+  (func (export "as-loadN-address") (result i32)
+    (block (result i32) (i32.load8_s (br_if 0 (i32.const 30) (i32.const 1)))))
 
 )
 
@@ -286,3 +292,6 @@
 
 (assert_return (invoke "as-global.set-value" (i32.const 0)) (i32.const -1))
 (assert_return (invoke "as-global.set-value" (i32.const 1)) (i32.const 1))
+
+(assert_return (invoke "as-load-address") (i32.const 1))
+(assert_return (invoke "as-loadN-address") (i32.const 30))

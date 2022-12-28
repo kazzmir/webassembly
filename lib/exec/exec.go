@@ -64,6 +64,7 @@ type Global struct {
 type Store struct {
     Tables []Table
     Globals []Global
+    Memory [][]byte
 }
 
 func InitializeStore(module core.WebAssemblyModule) *Store {
@@ -91,6 +92,14 @@ func InitializeStore(module core.WebAssemblyModule) *Store {
                 Value: value,
                 Mutable: global.Global.Mutable,
             })
+        }
+    }
+
+    memorySection := module.GetMemorySection()
+    if memorySection != nil {
+        for _, memory := range memorySection.Memories {
+            data := make([]byte, memory.Minimum * 65536)
+            out.Memory = append(out.Memory, data)
         }
     }
 

@@ -182,6 +182,15 @@ func (expr *I32AddExpression) ConvertToWat(labels data.Stack[int], indents strin
     return "i32.add"
 }
 
+/* FIXME: generalize these load expression types */
+type I32Load8sExpression struct {
+    Memory MemoryArgument
+}
+
+func (expr *I32Load8sExpression) ConvertToWat(labels data.Stack[int], indents string) string {
+    return "i32.load8_s"
+}
+
 type I32LoadExpression struct {
     Memory MemoryArgument
 }

@@ -330,6 +330,22 @@ func MakeExpressions(module WebAssemblyModule, expr *sexp.SExpression) []Express
             }
 
             return append(out, &GlobalSetExpression{&GlobalIndex{Id: index}})
+        case "i32.load":
+            var out []Expression
+            for _, child := range expr.Children {
+                out = append(out, MakeExpressions(module, child)...)
+            }
+
+            // FIXME: handle memory argument alignment and offset
+            return append(out, &I32LoadExpression{MemoryArgument{}})
+        case "i32.load8_s":
+            var out []Expression
+            for _, child := range expr.Children {
+                out = append(out, MakeExpressions(module, child)...)
+            }
+
+            // FIXME: handle memory argument alignment and offset
+            return append(out, &I32Load8sExpression{MemoryArgument{}})
 
     }
 
@@ -387,6 +403,7 @@ func (wast *Wast) CreateWasmModule() (WebAssemblyModule, error) {
     codeSection := new(WebAssemblyCodeSection)
     tableSection := new(WebAssemblyTableSection)
     exportSection := new(WebAssemblyExportSection)
+    memorySection := new(WebAssemblyMemorySection)
     globalSection := new(WebAssemblyGlobalSection)
     elementSection := new(WebAssemblyElementSection)
 
@@ -396,6 +413,7 @@ func (wast *Wast) CreateWasmModule() (WebAssemblyModule, error) {
     moduleOut.AddSection(tableSection)
     moduleOut.AddSection(elementSection)
     moduleOut.AddSection(globalSection)
+    moduleOut.AddSection(memorySection)
     moduleOut.AddSection(exportSection)
 
     for _, expr := range wast.Module.Children {
@@ -460,6 +478,14 @@ func (wast *Wast) CreateWasmModule() (WebAssemblyModule, error) {
 
                 valueExpr := MakeExpressions(moduleOut, value)
                 globalSection.AddGlobal(&globalType, valueExpr, name.Value)
+            case "memory":
+                min, err := strconv.Atoi(expr.Children[0].Value)
+                if err != nil {
+                    fmt.Printf("Error: unable to read minimum length of memory: %v", err)
+                    break
+                }
+
+                memorySection.AddMemory(Limit{Minimum: uint32(min)})
 
             case "table":
                 // so far this handles an inline table expression with funcref elements already given
