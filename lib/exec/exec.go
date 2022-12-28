@@ -55,8 +55,15 @@ type Table struct {
     Elements []core.Index
 }
 
+type Global struct {
+    Name string
+    Value RuntimeValue
+    Mutable bool
+}
+
 type Store struct {
     Tables []Table
+    Globals []Global
 }
 
 func InitializeStore(module core.WebAssemblyModule) *Store {
@@ -66,6 +73,24 @@ func InitializeStore(module core.WebAssemblyModule) *Store {
     if tableSection != nil {
         for _, table := range tableSection.Items {
             out.Tables = append(out.Tables, Table{Elements: make([]core.Index, table.Limit.Minimum)})
+        }
+    }
+
+    globalSection := module.GetGlobalSection()
+    if globalSection != nil {
+        for _, global := range globalSection.Globals {
+
+            value, err := EvaluateOne(global.Expression[0])
+            if err != nil {
+                fmt.Printf("Error: unable to evaluate global: %v\n", err)
+                continue
+            }
+
+            out.Globals = append(out.Globals, Global{
+                Name: global.Name,
+                Value: value,
+                Mutable: global.Global.Mutable,
+            })
         }
     }
 
@@ -287,6 +312,21 @@ func Execute(stack *data.Stack[RuntimeValue], labels *data.Stack[int], expressio
             }
             value := stack.Pop()
             frame.Locals[expr.Local] = value
+
+        case *core.GlobalSetExpression:
+            expr := current.(*core.GlobalSetExpression)
+            index := expr.Global.Id
+
+            if int(index) >= len(store.Globals) {
+                return 0, 0, fmt.Errorf("unable to set global %v when store has %v globals", index, len(store.Globals))
+            }
+
+            if !store.Globals[index].Mutable {
+                return 0, 0, fmt.Errorf("global %v is not mutable", index)
+            }
+
+            value := stack.Pop()
+            store.Globals[index].Value = value
 
         case *core.CallExpression:
             /* create a new stack frame, pop N values off the stack and put them in the locals of the frame.

@@ -111,14 +111,25 @@ func (section *WebAssemblyDataSection) String() string {
 type Global struct {
     Global *GlobalType
     Expression []Expression
+    Name string
 }
 
 type WebAssemblyGlobalSection struct {
     Globals []Global
 }
 
-func (section *WebAssemblyGlobalSection) AddGlobal(global *GlobalType, expression []Expression){
-    section.Globals = append(section.Globals, Global{Global: global, Expression: expression})
+func (section *WebAssemblyGlobalSection) AddGlobal(global *GlobalType, expression []Expression, name string){
+    section.Globals = append(section.Globals, Global{Global: global, Expression: expression, Name: name})
+}
+
+func (section *WebAssemblyGlobalSection) LookupGlobal(name string) (uint32, bool) {
+    for i := 0; i < len(section.Globals); i++ {
+        if section.Globals[i].Name == name {
+            return uint32(i), true
+        }
+    }
+
+    return 0, false
 }
 
 func (section *WebAssemblyGlobalSection) ToInterface() WebAssemblySection {
@@ -780,6 +791,10 @@ func (module *WebAssemblyModule) GetTableSection() *WebAssemblyTableSection {
 
 func (module *WebAssemblyModule) GetTypeSection() *WebAssemblyTypeSection {
     return findSection[*WebAssemblyTypeSection](module.Sections)
+}
+
+func (module *WebAssemblyModule) GetGlobalSection() *WebAssemblyGlobalSection {
+    return findSection[*WebAssemblyGlobalSection](module.Sections)
 }
 
 func (module *WebAssemblyModule) GetElementSection() *WebAssemblyElementSection {

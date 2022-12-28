@@ -194,6 +194,11 @@
        (local.tee 0 (br_if 0 (i32.const 1) (local.get 0)))
        (return (i32.const -1))))
 
+  (global $a (mut i32) (i32.const 10))
+  (func (export "as-global.set-value") (param i32) (result i32)
+     (block (result i32)
+        (global.set $a (br_if 0 (i32.const 1) (local.get 0)))
+        (return (i32.const -1))))
 
 
 )
@@ -278,3 +283,6 @@
 
 (assert_return (invoke "as-local.tee-value" (i32.const 0)) (i32.const -1))
 (assert_return (invoke "as-local.tee-value" (i32.const 1)) (i32.const 1))
+
+(assert_return (invoke "as-global.set-value" (i32.const 0)) (i32.const -1))
+(assert_return (invoke "as-global.set-value" (i32.const 1)) (i32.const 1))

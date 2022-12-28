@@ -928,7 +928,7 @@ func (module *WebAssemblyFileModule) ReadGlobalSection(size uint32) (*WebAssembl
             log.Printf("Global element %v: global=%v expressions=%v\n", i, global, expressions)
         }
 
-        section.AddGlobal(global, expressions)
+        section.AddGlobal(global, expressions, "")
     }
 
     return &section, nil

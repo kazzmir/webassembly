@@ -308,6 +308,28 @@ func MakeExpressions(module WebAssemblyModule, expr *sexp.SExpression) []Express
             }
 
             return append(out, &LocalTeeExpression{Local: uint32(index)})
+        case "global.set":
+            name := expr.Children[0]
+
+            var index uint32
+            v, err := strconv.Atoi(name.Value)
+            if err != nil {
+                var ok bool
+                index, ok = module.GetGlobalSection().LookupGlobal(name.Value)
+                if !ok {
+                    fmt.Printf("Error: unable to find global '%v'\n", name.Value)
+                    return nil
+                }
+            } else {
+                index = uint32(v)
+            }
+
+            var out []Expression
+            if len(expr.Children) > 1 {
+                out = MakeExpressions(module, expr.Children[1])
+            }
+
+            return append(out, &GlobalSetExpression{&GlobalIndex{Id: index}})
 
     }
 
@@ -365,6 +387,7 @@ func (wast *Wast) CreateWasmModule() (WebAssemblyModule, error) {
     codeSection := new(WebAssemblyCodeSection)
     tableSection := new(WebAssemblyTableSection)
     exportSection := new(WebAssemblyExportSection)
+    globalSection := new(WebAssemblyGlobalSection)
     elementSection := new(WebAssemblyElementSection)
 
     moduleOut.AddSection(typeSection)
@@ -372,6 +395,7 @@ func (wast *Wast) CreateWasmModule() (WebAssemblyModule, error) {
     moduleOut.AddSection(codeSection)
     moduleOut.AddSection(tableSection)
     moduleOut.AddSection(elementSection)
+    moduleOut.AddSection(globalSection)
     moduleOut.AddSection(exportSection)
 
     for _, expr := range wast.Module.Children {
@@ -419,6 +443,24 @@ func (wast *Wast) CreateWasmModule() (WebAssemblyModule, error) {
                     typeIndex := typeSection.GetOrCreateFunctionType(MakeFunctionType(kind))
                     typeSection.AssociateName(name.Value, &TypeIndex{Id: typeIndex})
                 }
+            case "global":
+                name := expr.Children[0]
+                kind := expr.Children[1]
+                value := expr.Children[2]
+
+                globalType := GlobalType{}
+
+                if kind.Name == "mut" {
+                    globalType.Mutable = true
+                    globalType.ValueType = ValueTypeFromName(kind.Children[0].Value)
+                } else {
+                    globalType.Mutable = false
+                    globalType.ValueType = ValueTypeFromName(kind.Value)
+                }
+
+                valueExpr := MakeExpressions(moduleOut, value)
+                globalSection.AddGlobal(&globalType, valueExpr, name.Value)
+
             case "table":
                 // so far this handles an inline table expression with funcref elements already given
                 reftype := expr.Children[0]
