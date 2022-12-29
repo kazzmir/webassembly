@@ -140,10 +140,16 @@ const ReturnLabel int = 1<<30
  *  input: stack of runtime values, stack of block labels, list of expressions to execute, instruction index into 'expressions', activation frame
  *  output: next instruction number to execute, number of blocks to skip (if greater than 0), and any errors that may occur (including traps)
  */
+// FIXME: remove labels
 func Execute(stack *data.Stack[RuntimeValue], labels *data.Stack[int], expressions []core.Expression, instruction int, frame Frame, store *Store) (int, int, error) {
     current := expressions[instruction]
 
-    // fmt.Printf("Stack is now %+v\n", *stack)
+    /*
+    fmt.Printf("Stack is now %+v executing %v\n", *stack, reflect.TypeOf(current))
+    if stack.Size() > 100 {
+        return 0, 0, fmt.Errorf("fail")
+    }
+    */
 
     /* branches work by jumping to the Nth block, where N represents the nesting level of the blocks.
      *   (block_a (block_b (br 0) (br 1)))
@@ -176,8 +182,10 @@ func Execute(stack *data.Stack[RuntimeValue], labels *data.Stack[int], expressio
                 }
             }
 
+            currentStackSize := stack.Size()
+
             /* Keep track of the number of values on the stack in case they need to be popped off later */
-            labels.Push(stack.Size())
+            // labels.Push(stack.Size())
             local := 0
             for local < len(instructions) {
                 var branch int
@@ -194,12 +202,22 @@ func Execute(stack *data.Stack[RuntimeValue], labels *data.Stack[int], expressio
                      * will pop off the values it needs
                      */
                     if branch == ReturnLabel {
-                        labels.Pop()
+                        // labels.Pop()
                         return instruction+1, branch, nil
+                    }
+
+                    /* go back to the same block instruction if we are branching to this loop */
+                    if branch == 1 && block.Kind == core.BlockKindLoop {
+                        /* don't pop anything from the stack if we are re-entering the loop */
+                        // labels.Pop()
+                        return instruction, 0, nil
                     }
 
                     // fmt.Printf("Branch to %v\n", branch)
                     if branch == 1 {
+                        /* we are jumping back to some block that only cares about the last N values on the stack, so pop all values
+                         * between whatever was on the stack when the block was entered and what is there now
+                         */
                         results := stack.PopN(len(block.ExpectedType))
 
                         for _, last := range results {
@@ -210,23 +228,19 @@ func Execute(stack *data.Stack[RuntimeValue], labels *data.Stack[int], expressio
 
                         /* Remove all values on the stack that were produced during the dynamic extent of this block
                          */
-                        size := labels.Pop()
+                        // size := labels.Pop()
+                        size := currentStackSize
                         stack.Reduce(size)
                         stack.PushAll(results)
                     } else {
-                        labels.Pop()
-                    }
-
-                    /* go back to the same block instruction if we are branching to this loop */
-                    if branch == 1 && block.Kind == core.BlockKindLoop {
-                        return instruction, 0, nil
+                        // labels.Pop()
                     }
 
                     /* otherwise go to the instruction after this block */
                     return instruction+1, branch-1, nil
                 }
             }
-            labels.Pop()
+            // labels.Pop()
 
         case *core.SelectExpression:
             c := stack.Pop()
@@ -439,12 +453,15 @@ func Execute(stack *data.Stack[RuntimeValue], labels *data.Stack[int], expressio
             functionTypeIndex := frame.Module.GetFunctionSection().GetFunctionType(int(expr.Index.Id))
             functionType := frame.Module.GetTypeSection().GetFunction(functionTypeIndex.Id)
 
+            /*
             var args []RuntimeValue
             for _, input := range functionType.InputTypes {
                 // FIXME: check that the stack contains the same type as 'input'
                 _ = input
                 args = append(args, stack.Pop())
             }
+            */
+            args := stack.PopN(len(functionType.InputTypes))
 
             code := frame.Module.GetCodeSection().GetFunction(expr.Index.Id)
 
