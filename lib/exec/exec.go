@@ -512,7 +512,7 @@ func AssertReturn(module core.WebAssemblyModule, assert sexp.SExpression) error 
 
         var args []RuntimeValue
         for _, arg := range what.Children[1:] {
-            expressions := core.MakeExpressions(module, arg)
+            expressions := core.MakeExpressions(module, nil, arg)
             nextArg, err := EvaluateOne(expressions[0])
             if err != nil {
                 return err
@@ -529,7 +529,7 @@ func AssertReturn(module core.WebAssemblyModule, assert sexp.SExpression) error 
         }
 
         if len(assert.Children) == 2 {
-            expressions := core.MakeExpressions(module, assert.Children[1])
+            expressions := core.MakeExpressions(module, nil, assert.Children[1])
             expected, err := EvaluateOne(expressions[0])
             if err != nil {
                 return err

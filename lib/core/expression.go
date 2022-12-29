@@ -11,12 +11,23 @@ import (
 
 type Local struct {
     Count uint32
+    Name string
     Type ValueType
 }
 
 type Code struct {
     Locals []Local
     Expressions []Expression
+}
+
+func (code *Code) LookupLocal(name string) (int, bool) {
+    for i := 0; i < len(code.Locals); i++ {
+        if code.Locals[i].Name == name {
+            return i, true
+        }
+    }
+
+    return 0, false
 }
 
 func (code *Code) ConvertToWat(indents string) string {
