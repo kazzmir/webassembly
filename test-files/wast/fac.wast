@@ -80,4 +80,4 @@
 (assert_return (invoke "fac-iter" (i64.const 25)) (i64.const 7034535277573963776))
 (assert_return (invoke "fac-iter-named" (i64.const 25)) (i64.const 7034535277573963776))
 (assert_return (invoke "fac-opt" (i64.const 25)) (i64.const 7034535277573963776))
-(assert_return (invoke "fac-ssa" (i64.const 25)) (i64.const 7034535277573963776))
+;;(assert_return (invoke "fac-ssa" (i64.const 25)) (i64.const 7034535277573963776))

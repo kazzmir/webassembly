@@ -171,16 +171,21 @@ func MakeExpressions(module WebAssemblyModule, code *Code, labels data.Stack[str
 
             return append(out, &BranchExpression{Label: uint32(label)})
         case "br_if":
+            var out []Expression
+
+            for _, child := range expr.Children[1:] {
+                out = append(out, MakeExpressions(module, code, labels, child)...)
+            }
+
             label, err := strconv.Atoi(expr.Children[0].Value)
             if err != nil {
 
+                index, ok := labels.Find(expr.Children[0].Value)
+                if ok {
+                    return append(out, &BranchIfExpression{Label: uint32(index)})
+                }
+
                 return nil
-            }
-
-            out := MakeExpressions(module, code, labels, expr.Children[1])
-
-            if len(expr.Children) > 2 {
-                out = append(out, MakeExpressions(module, code, labels, expr.Children[2])...)
             }
 
             return append(out, &BranchIfExpression{Label: uint32(label)})
