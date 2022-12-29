@@ -306,6 +306,10 @@ func MakeExpressions(module WebAssemblyModule, code *Code, expr *sexp.SExpressio
                 index = value
             } else {
                 var ok bool
+                /* look up the function by name, but if we can't find it now then the function might exist later
+                 * once more functions are parsed. in case the function can't be found then insert a delayed
+                 * expression that will get replaced in a second pass.
+                 */
                 index, ok = module.GetFunctionSection().GetFunctionIndexByName(name)
                 if !ok {
                     return append(out, &SecondPassExpression{
