@@ -245,8 +245,8 @@ func Execute(stack *data.Stack[RuntimeValue], labels *data.Stack[int], expressio
         case *core.SelectExpression:
             c := stack.Pop()
 
-            v1 := stack.Pop()
             v2 := stack.Pop()
+            v1 := stack.Pop()
             if c.I32 != 0 {
                 stack.Push(v1)
             } else {
@@ -442,6 +442,19 @@ func Execute(stack *data.Stack[RuntimeValue], labels *data.Stack[int], expressio
 
             value := stack.Pop()
             store.Globals[index].Value = value
+        case *core.GlobalGetExpression:
+            expr := current.(*core.GlobalSetExpression)
+            index := expr.Global.Id
+
+            if int(index) >= len(store.Globals) {
+                return 0, 0, fmt.Errorf("unable to set global %v when store has %v globals", index, len(store.Globals))
+            }
+
+            if !store.Globals[index].Mutable {
+                return 0, 0, fmt.Errorf("global %v is not mutable", index)
+            }
+
+            stack.Push(store.Globals[index].Value)
 
         case *core.CallExpression:
             /* create a new stack frame, pop N values off the stack and put them in the locals of the frame.

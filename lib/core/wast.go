@@ -170,6 +170,9 @@ func MakeExpressions(module WebAssemblyModule, code *Code, labels data.Stack[str
             }
 
             return append(out, &BranchExpression{Label: uint32(label)})
+        case "nop":
+            /* FIXME: does this need an actual expression object? */
+            return nil
         case "br_if":
             var out []Expression
 
@@ -473,6 +476,29 @@ func MakeExpressions(module WebAssemblyModule, code *Code, labels data.Stack[str
             }
 
             return append(out, &LocalTeeExpression{Local: uint32(index)})
+        case "global.get":
+            name := expr.Children[0]
+
+            var index uint32
+            v, err := strconv.Atoi(name.Value)
+            if err != nil {
+                var ok bool
+                index, ok = module.GetGlobalSection().LookupGlobal(name.Value)
+                if !ok {
+                    fmt.Printf("Error: unable to find global '%v'\n", name.Value)
+                    return nil
+                }
+            } else {
+                index = uint32(v)
+            }
+
+            var out []Expression
+            if len(expr.Children) > 1 {
+                out = MakeExpressions(module, code, labels, expr.Children[1])
+            }
+
+            return append(out, &GlobalGetExpression{&GlobalIndex{Id: index}})
+
         case "global.set":
             name := expr.Children[0]
 
