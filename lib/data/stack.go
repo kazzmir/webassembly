@@ -12,8 +12,34 @@ func (stack *Stack[T]) Get(depth uint32) T {
     return stack.Values[len(stack.Values) - int(depth) - 1]
 }
 
+func (stack *Stack[T]) PopN(n int) []T {
+    var out []T
+
+    for i := 0; i < n; i++ {
+        out = append(out, stack.Values[len(stack.Values)-n+i])
+    }
+    stack.Values = stack.Values[0:len(stack.Values)-n]
+
+    return out
+}
+
 func (stack *Stack[T]) Push(value T){
     stack.Values = append(stack.Values, value)
+}
+
+func (stack *Stack[T]) PushAll(values []T){
+    for _, value := range values {
+        stack.Push(value)
+    }
+}
+
+func (stack *Stack[T]) ToArray() []T {
+    var out []T
+    /* FIXME: use copy */
+    for _, value := range stack.Values {
+        out = append(out, value)
+    }
+    return out
 }
 
 /* returns the first index of 'value' starting from the top (0) */

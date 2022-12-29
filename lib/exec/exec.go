@@ -188,20 +188,33 @@ func Execute(stack *data.Stack[RuntimeValue], labels *data.Stack[int], expressio
                 }
 
                 if branch > 0 {
-                    // fmt.Printf("Branch to %v\n", branch)
-                    last := stack.Pop()
-
-                    /* Remove all values on the stack that were produced during the dynamic extent of this block
-                     */
-                    size := labels.Pop()
-                    stack.Reduce(size)
-                    stack.Push(last)
 
                     /* if we are handling a return then don't change the branch value so that all parent blocks
-                     * also do a return
+                     * also do a return. the stack will contain all kinds of stuff, but the function return
+                     * will pop off the values it needs
                      */
                     if branch == ReturnLabel {
+                        labels.Pop()
                         return instruction+1, branch, nil
+                    }
+
+                    // fmt.Printf("Branch to %v\n", branch)
+                    if branch == 1 {
+                        results := stack.PopN(len(block.ExpectedType))
+
+                        for _, last := range results {
+                            if last.Kind == RuntimeValueNone {
+                                return 0, 0, fmt.Errorf("invalid runtime value on stack after branch")
+                            }
+                        }
+
+                        /* Remove all values on the stack that were produced during the dynamic extent of this block
+                         */
+                        size := labels.Pop()
+                        stack.Reduce(size)
+                        stack.PushAll(results)
+                    } else {
+                        labels.Pop()
                     }
 
                     /* go back to the same block instruction if we are branching to this loop */
@@ -263,6 +276,39 @@ func Execute(stack *data.Stack[RuntimeValue], labels *data.Stack[int], expressio
                 Kind: RuntimeValueI32,
                 I32: arg2.I32 - arg1.I32,
             })
+        case *core.I64LtsExpression:
+            arg1 := stack.Pop()
+            arg2 := stack.Pop()
+            value := 0
+            if arg2.I64 < arg1.I64 {
+                value = 1
+            }
+            stack.Push(RuntimeValue{
+                Kind: RuntimeValueI32,
+                I32: int32(value),
+            })
+        case *core.I64GtsExpression:
+            arg1 := stack.Pop()
+            arg2 := stack.Pop()
+            value := 0
+            if arg2.I64 > arg1.I64 {
+                value = 1
+            }
+            stack.Push(RuntimeValue{
+                Kind: RuntimeValueI32,
+                I32: int32(value),
+            })
+        case *core.I64GtuExpression:
+            arg1 := stack.Pop()
+            arg2 := stack.Pop()
+            value := 0
+            if uint64(arg2.I64) > uint64(arg1.I64) {
+                value = 1
+            }
+            stack.Push(RuntimeValue{
+                Kind: RuntimeValueI32,
+                I32: int32(value),
+            })
         case *core.I64SubExpression:
             arg1 := stack.Pop()
             arg2 := stack.Pop()
@@ -270,6 +316,14 @@ func Execute(stack *data.Stack[RuntimeValue], labels *data.Stack[int], expressio
                 Kind: RuntimeValueI64,
                 I64: arg2.I64 - arg1.I64,
             })
+        case *core.I64AddExpression:
+            arg1 := stack.Pop()
+            arg2 := stack.Pop()
+            stack.Push(RuntimeValue{
+                Kind: RuntimeValueI64,
+                I64: arg2.I64 + arg1.I64,
+            })
+
         case *core.I64MulExpression:
             arg1 := stack.Pop()
             arg2 := stack.Pop()
@@ -401,13 +455,13 @@ func Execute(stack *data.Stack[RuntimeValue], labels *data.Stack[int], expressio
             out, err := RunCode(code, Frame{
                 Locals: args,
                 Module: frame.Module,
-            }, store)
+            }, functionType, store)
 
             if err != nil {
                 return 0, 0, err
             }
 
-            stack.Push(out)
+            stack.PushAll(out)
 
         default:
             return 0, 0, fmt.Errorf("unhandled instruction %v %+v", reflect.TypeOf(current), current)
@@ -436,7 +490,7 @@ func EvaluateOne(expression core.Expression) (RuntimeValue, error) {
 
 /* evaluate an entire function
  */
-func RunCode(code core.Code, frame Frame, store *Store) (RuntimeValue, error) {
+func RunCode(code core.Code, frame Frame, functionType core.WebAssemblyFunction, store *Store) ([]RuntimeValue, error) {
     var stack data.Stack[RuntimeValue]
     var labels data.Stack[int]
 
@@ -447,40 +501,43 @@ func RunCode(code core.Code, frame Frame, store *Store) (RuntimeValue, error) {
         var err error
         instruction, branch, err = Execute(&stack, &labels, code.Expressions, instruction, frame, store)
         if err != nil {
-            return RuntimeValue{}, err
+            return nil, err
         }
         if branch == ReturnLabel {
-            return stack.Pop(), nil
+            // FIXME: return the number of values as declared by the function (result ...)
+            return stack.PopN(len(functionType.OutputTypes)), nil
         }
         /* if we a branch was executed to label 0, then the 'branch' variable will be equal to 1,
          * which has the same meaning as the end of the function
          */
         if branch == 1 {
-            return stack.Pop(), nil
+            return []RuntimeValue{stack.Pop()}, nil
         }
         if branch != 0 {
-            return RuntimeValue{}, fmt.Errorf("Branch to non-existent block: %v", branch)
+            return nil, fmt.Errorf("Branch to non-existent block: %v", branch)
         }
     }
 
-    if stack.Size() > 0 {
-        /* FIXME: return all values on the stack */
-        return stack.Pop(), nil
+    if stack.Size() != len(functionType.OutputTypes) {
+        return nil, fmt.Errorf("too many values still on the stack %v, but expected %v", stack.Size(), len(functionType.OutputTypes))
     }
 
-    return RuntimeValue{}, nil
+    return stack.ToArray(), nil
 }
 
 /* invoke an exported function in the given module */
-func Invoke(module core.WebAssemblyModule, store *Store, name string, args []RuntimeValue) (RuntimeValue, error) {
+func Invoke(module core.WebAssemblyModule, store *Store, name string, args []RuntimeValue) ([]RuntimeValue, error) {
     kind := module.GetExportSection().FindExportByName(name)
     if kind == nil {
-        return RuntimeValue{}, fmt.Errorf("no such exported function '%v'", name)
+        return nil, fmt.Errorf("no such exported function '%v'", name)
     }
 
     function, ok := kind.(*core.FunctionIndex)
     if ok {
         code := module.GetCodeSection().GetFunction(function.Id)
+        functionTypeIndex := module.GetFunctionSection().GetFunctionType(int(function.Id))
+
+        type_ := module.GetTypeSection().GetFunction(functionTypeIndex.Id)
 
         for _, local := range code.Locals {
             args = append(args, MakeRuntimeValue(local.Type))
@@ -491,12 +548,12 @@ func Invoke(module core.WebAssemblyModule, store *Store, name string, args []Run
             Module: module,
         }
 
-        return RunCode(code, frame, store)
+        return RunCode(code, frame, type_, store)
     } else {
-        return RuntimeValue{}, fmt.Errorf("no such exported function '%v'", name)
+        return nil, fmt.Errorf("no such exported function '%v'", name)
     }
    
-    return RuntimeValue{}, fmt.Errorf("shouldnt get here")
+    return nil, fmt.Errorf("shouldnt get here")
 }
 
 func cleanName(name string) string {
@@ -534,7 +591,7 @@ func AssertReturn(module core.WebAssemblyModule, assert sexp.SExpression) error 
             if err != nil {
                 return err
             } else {
-                if result != expected {
+                if len(result) != 1 || result[0] != expected {
                     return fmt.Errorf("result=%v expected=%v", result, expected)
                 }
             }

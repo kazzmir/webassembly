@@ -178,6 +178,34 @@ func (expr *I32ConstExpression) ConvertToWat(labels data.Stack[int], indents str
     return fmt.Sprintf("i32.const %v", expr.N)
 }
 
+type I64LtsExpression struct {
+}
+
+func (expr *I64LtsExpression) ConvertToWat(labels data.Stack[int], indents string) string {
+    return "i64.lt_s"
+}
+
+type I64GtsExpression struct {
+}
+
+func (expr *I64GtsExpression) ConvertToWat(labels data.Stack[int], indents string) string {
+    return "i64.gt_s"
+}
+
+type I64GtuExpression struct {
+}
+
+func (expr *I64GtuExpression) ConvertToWat(labels data.Stack[int], indents string) string {
+    return "i64.gt_u"
+}
+
+type I64AddExpression struct {
+}
+
+func (expr *I64AddExpression) ConvertToWat(labels data.Stack[int], indents string) string {
+    return "i64.add"
+}
+
 type I64ConstExpression struct {
     N int64
 }

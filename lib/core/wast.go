@@ -77,6 +77,10 @@ func MakeExpressions(module WebAssemblyModule, code *Code, labels data.Stack[str
                     }
                     continue
                 }
+                if child.Name == "param" {
+                    /* FIXME: handle this */
+                    continue
+                }
                 /* (block $x ...) */
                 if i == 0 {
                     if child.Value != "" {
@@ -200,10 +204,11 @@ func MakeExpressions(module WebAssemblyModule, code *Code, labels data.Stack[str
 
             return append(out, &BranchTableExpression{Labels: tableLabels})
         case "return":
-            if len(expr.Children) > 0 {
-                return append(MakeExpressions(module, code, labels, expr.Children[0]), &ReturnExpression{})
+            var out []Expression
+            for _, child := range expr.Children {
+                out = append(out, MakeExpressions(module, code, labels, child)...)
             }
-            return []Expression{&ReturnExpression{}}
+            return append(out, &ReturnExpression{})
         case "i32.const":
             value, err := strconv.Atoi(expr.Children[0].Value)
             if err != nil {
@@ -217,6 +222,30 @@ func MakeExpressions(module WebAssemblyModule, code *Code, labels data.Stack[str
             }
         case "i32.ctz":
             return append(MakeExpressions(module, code, labels, expr.Children[0]), &I32CtzExpression{})
+        case "i64.lt_s":
+            var out []Expression
+            for _, child := range expr.Children {
+                out = append(out, MakeExpressions(module, code, labels, child)...)
+            }
+            return append(out, &I64LtsExpression{})
+        case "i64.gt_s":
+            var out []Expression
+            for _, child := range expr.Children {
+                out = append(out, MakeExpressions(module, code, labels, child)...)
+            }
+            return append(out, &I64GtsExpression{})
+        case "i64.gt_u":
+            var out []Expression
+            for _, child := range expr.Children {
+                out = append(out, MakeExpressions(module, code, labels, child)...)
+            }
+            return append(out, &I64GtuExpression{})
+        case "i64.add":
+            var out []Expression
+            for _, child := range expr.Children {
+                out = append(out, MakeExpressions(module, code, labels, child)...)
+            }
+            return append(out, &I64AddExpression{})
         case "i64.const":
             value, err := strconv.ParseInt(expr.Children[0].Value, 10, 64)
             if err != nil {
@@ -232,10 +261,12 @@ func MakeExpressions(module WebAssemblyModule, code *Code, labels data.Stack[str
         case "i64.ctz":
             return append(MakeExpressions(module, code, labels, expr.Children[0]), &I64CtzExpression{})
         case "i32.add":
-            arg1 := MakeExpressions(module, code, labels, expr.Children[0])
-            arg2 := MakeExpressions(module, code, labels, expr.Children[1])
-            out := append(arg1, arg2...)
+            var out []Expression
+            for _, child := range expr.Children {
+                out = append(out, MakeExpressions(module, code, labels, child)...)
+            }
             return append(out, &I32AddExpression{})
+
         case "i64.sub":
             var out []Expression
             for _, child := range expr.Children {
@@ -351,8 +382,11 @@ func MakeExpressions(module WebAssemblyModule, code *Code, labels data.Stack[str
 
             return append(out, &CallExpression{Index: &FunctionIndex{uint32(index)}})
         case "drop":
-            argument := MakeExpressions(module, code, labels, expr.Children[0])
-            return append(argument, &DropExpression{})
+            var out []Expression
+            for _, child := range expr.Children {
+                out = append(out, MakeExpressions(module, code, labels, child)...)
+            }
+            return append(out, &DropExpression{})
         case "f32.const":
             value, err := strconv.ParseFloat(expr.Children[0].Value, 32)
             if err != nil {
@@ -619,18 +653,18 @@ func (wast *Wast) CreateWasmModule() (WebAssemblyModule, error) {
                                 exportedName = cleanName(child.Children[0].Value)
                             case "param":
                                 var paramName string
-                                var paramType string
-                                if len(child.Children) == 2 {
-                                    paramName = child.Children[0].Value
-                                    paramType = child.Children[1].Value
-                                } else {
-                                    paramType = child.Children[0].Value
+                                for i, param := range child.Children {
+                                    use := ValueTypeFromName(param.Value)
+                                    if i == 0 && use == InvalidValueType {
+                                        paramName = param.Value
+                                    } else {
+                                        code.Locals = append(code.Locals, Local{
+                                            Count: 1,
+                                            Name: paramName,
+                                            Type: use,
+                                        })
+                                    }
                                 }
-                                code.Locals = append(code.Locals, Local{
-                                    Count: 1,
-                                    Name: paramName,
-                                    Type: ValueTypeFromName(paramType),
-                                })
                                 functionType.InputTypes = append(functionType.InputTypes, ConvertValueTypes(child)...)
                             case "result":
                                 functionType.OutputTypes = ConvertValueTypes(child)
@@ -664,38 +698,6 @@ func (wast *Wast) CreateWasmModule() (WebAssemblyModule, error) {
                 if exportedName != "" {
                     exportSection.AddExport(exportedName, &FunctionIndex{Id: functionIndex})
                 }
-
-                /*
-                name := expr.Children[0]
-                if name.Name == "export" {
-                    // 1. create a type that matches the given function and call typesection.AddFunctionType()
-                    // 2. create a function that references the newly created type and call functionsection.AddFunction()
-                    // 3. create a FunctionIndex and add it to the export section with exportSection.AddExport()
-                    functionName := name.Children[0]
-
-                    functionType := MakeFunctionType(expr)
-                    typeIndex := typeSection.GetOrCreateFunctionType(functionType)
-
-                    functionIndex := functionSection.AddFunction(&TypeIndex{
-                        Id: typeIndex,
-                    }, cleanName(functionName.Value))
-
-                    code := MakeCode(moduleOut, expr)
-
-                    codeSection.AddCode(code)
-
-                    exportSection.AddExport(cleanName(functionName.Value), &FunctionIndex{Id: functionIndex})
-                } else {
-                    functionType := MakeFunctionType(expr)
-                    typeIndex := typeSection.GetOrCreateFunctionType(functionType)
-
-                    _ = functionSection.AddFunction(&TypeIndex{
-                        Id: typeIndex,
-                    }, name.Value)
-
-                    codeSection.AddCode(MakeCode(moduleOut, expr))
-                }
-                */
             case "type":
                 name := expr.Children[0]
                 kind := expr.Children[1]
