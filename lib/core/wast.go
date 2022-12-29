@@ -65,19 +65,30 @@ func MakeFunctionType(function *sexp.SExpression) WebAssemblyFunction {
     return out
 }
 
-func MakeExpressions(module WebAssemblyModule, code *Code, expr *sexp.SExpression) []Expression {
+func MakeExpressions(module WebAssemblyModule, code *Code, labels data.Stack[string], expr *sexp.SExpression) []Expression {
     switch expr.Name {
         case "block", "loop":
             var children []Expression
             var expectedType []ValueType
-            for _, child := range expr.Children {
+            for i, child := range expr.Children {
                 if child.Name == "result" {
                     for _, result := range child.Children {
                         expectedType = append(expectedType, ValueTypeFromName(result.Value))
                     }
                     continue
                 }
-                children = append(children, MakeExpressions(module, code, child)...)
+                /* (block $x ...) */
+                if i == 0 {
+                    if child.Value != "" {
+                        labels.Push(child.Value)
+                        defer labels.Pop()
+                        continue
+                    } else {
+                        labels.Push("") // push unnamed label
+                        defer labels.Pop()
+                    }
+                }
+                children = append(children, MakeExpressions(module, code, labels, child)...)
             }
 
             var kind BlockKind = BlockKindBlock
@@ -98,6 +109,9 @@ func MakeExpressions(module WebAssemblyModule, code *Code, expr *sexp.SExpressio
             var thenInstructions []Expression
             var elseInstructions []Expression
 
+            labels.Push("") // unnamed label for if
+            defer labels.Pop()
+
             for _, child := range expr.Children {
                 if child.Name == "result" {
                     for _, result := range child.Children {
@@ -108,14 +122,14 @@ func MakeExpressions(module WebAssemblyModule, code *Code, expr *sexp.SExpressio
 
                 if child.Name == "then" {
                     for _, then := range child.Children {
-                        thenInstructions = append(thenInstructions, MakeExpressions(module, code, then)...)
+                        thenInstructions = append(thenInstructions, MakeExpressions(module, code, labels, then)...)
                     }
                 } else if child.Name == "else" {
                     for _, expr := range child.Children {
-                        elseInstructions = append(elseInstructions, MakeExpressions(module, code, expr)...)
+                        elseInstructions = append(elseInstructions, MakeExpressions(module, code, labels, expr)...)
                     }
                 } else {
-                    out = append(out, MakeExpressions(module, code, child)...)
+                    out = append(out, MakeExpressions(module, code, labels, child)...)
                 }
             }
 
@@ -129,38 +143,46 @@ func MakeExpressions(module WebAssemblyModule, code *Code, expr *sexp.SExpressio
             var out []Expression
 
             for _, child := range expr.Children {
-                out = append(out, MakeExpressions(module, code, child)...)
+                out = append(out, MakeExpressions(module, code, labels, child)...)
             }
 
             return append(out, &SelectExpression{})
         case "br":
+            var out []Expression
+
+            for _, child := range expr.Children[1:] {
+                out = append(out, MakeExpressions(module, code, labels, child)...)
+            }
+
             label, err := strconv.Atoi(expr.Children[0].Value)
             if err != nil {
+
+                index, ok := labels.Find(expr.Children[0].Value)
+                if ok {
+                    return append(out, &BranchExpression{Label: uint32(index)})
+                }
+
                 return nil
             }
 
-            if len(expr.Children) > 1 {
-                return append(MakeExpressions(module, code, expr.Children[1]), &BranchExpression{Label: uint32(label)})
-            } else {
-                return []Expression{&BranchExpression{Label: uint32(label)}}
-            }
-
+            return append(out, &BranchExpression{Label: uint32(label)})
         case "br_if":
             label, err := strconv.Atoi(expr.Children[0].Value)
             if err != nil {
+
                 return nil
             }
 
-            out := MakeExpressions(module, code, expr.Children[1])
+            out := MakeExpressions(module, code, labels, expr.Children[1])
 
             if len(expr.Children) > 2 {
-                out = append(out, MakeExpressions(module, code, expr.Children[2])...)
+                out = append(out, MakeExpressions(module, code, labels, expr.Children[2])...)
             }
 
             return append(out, &BranchIfExpression{Label: uint32(label)})
         case "br_table":
             var out []Expression
-            var labels []uint32
+            var tableLabels []uint32
             // (br_table l1 l2 l3 (expr ...) (expr ...))
             for _, child := range expr.Children {
                 if child.Value != "" {
@@ -169,17 +191,17 @@ func MakeExpressions(module WebAssemblyModule, code *Code, expr *sexp.SExpressio
                         return nil
                     }
 
-                    labels = append(labels, uint32(label))
+                    tableLabels = append(tableLabels, uint32(label))
                 } else {
                     // FIXME: once we start seeing expressions we shouldn't see any more labels, try to enforce this
-                    out = append(out, MakeExpressions(module, code, child)...)
+                    out = append(out, MakeExpressions(module, code, labels, child)...)
                 }
             }
 
-            return append(out, &BranchTableExpression{Labels: labels})
+            return append(out, &BranchTableExpression{Labels: tableLabels})
         case "return":
             if len(expr.Children) > 0 {
-                return append(MakeExpressions(module, code, expr.Children[0]), &ReturnExpression{})
+                return append(MakeExpressions(module, code, labels, expr.Children[0]), &ReturnExpression{})
             }
             return []Expression{&ReturnExpression{}}
         case "i32.const":
@@ -194,7 +216,7 @@ func MakeExpressions(module WebAssemblyModule, code *Code, expr *sexp.SExpressio
                 },
             }
         case "i32.ctz":
-            return append(MakeExpressions(module, code, expr.Children[0]), &I32CtzExpression{})
+            return append(MakeExpressions(module, code, labels, expr.Children[0]), &I32CtzExpression{})
         case "i64.const":
             value, err := strconv.ParseInt(expr.Children[0].Value, 10, 64)
             if err != nil {
@@ -208,59 +230,59 @@ func MakeExpressions(module WebAssemblyModule, code *Code, expr *sexp.SExpressio
             }
 
         case "i64.ctz":
-            return append(MakeExpressions(module, code, expr.Children[0]), &I64CtzExpression{})
+            return append(MakeExpressions(module, code, labels, expr.Children[0]), &I64CtzExpression{})
         case "i32.add":
-            arg1 := MakeExpressions(module, code, expr.Children[0])
-            arg2 := MakeExpressions(module, code, expr.Children[1])
+            arg1 := MakeExpressions(module, code, labels, expr.Children[0])
+            arg2 := MakeExpressions(module, code, labels, expr.Children[1])
             out := append(arg1, arg2...)
             return append(out, &I32AddExpression{})
         case "i64.sub":
             var out []Expression
             for _, child := range expr.Children {
-                out = append(out, MakeExpressions(module, code, child)...)
+                out = append(out, MakeExpressions(module, code, labels, child)...)
             }
             return append(out, &I64SubExpression{})
         case "i32.sub":
             var out []Expression
             for _, child := range expr.Children {
-                out = append(out, MakeExpressions(module, code, child)...)
+                out = append(out, MakeExpressions(module, code, labels, child)...)
             }
             return append(out, &I32SubExpression{})
         case "i64.eq":
             var out []Expression
             for _, child := range expr.Children {
-                out = append(out, MakeExpressions(module, code, child)...)
+                out = append(out, MakeExpressions(module, code, labels, child)...)
             }
             return append(out, &I64EqExpression{})
 
         case "i32.eqz":
             var out []Expression
             for _, child := range expr.Children {
-                out = append(out, MakeExpressions(module, code, child)...)
+                out = append(out, MakeExpressions(module, code, labels, child)...)
             }
             return append(out, &I32EqzExpression{})
         case "i32.le_u":
             var out []Expression
             for _, child := range expr.Children {
-                out = append(out, MakeExpressions(module, code, child)...)
+                out = append(out, MakeExpressions(module, code, labels, child)...)
             }
             return append(out, &I32LeuExpression{})
         case "i32.ne":
             var out []Expression
             for _, child := range expr.Children {
-                out = append(out, MakeExpressions(module, code, child)...)
+                out = append(out, MakeExpressions(module, code, labels, child)...)
             }
             return append(out, &I32NeExpression{})
         case "i64.mul":
             var out []Expression
             for _, child := range expr.Children {
-                out = append(out, MakeExpressions(module, code, child)...)
+                out = append(out, MakeExpressions(module, code, labels, child)...)
             }
             return append(out, &I64MulExpression{})
         case "memory.grow":
             var out []Expression
             for _, child := range expr.Children {
-                out = append(out, MakeExpressions(module, code, child)...)
+                out = append(out, MakeExpressions(module, code, labels, child)...)
             }
             return append(out, &MemoryGrowExpression{})
 
@@ -284,7 +306,7 @@ func MakeExpressions(module WebAssemblyModule, code *Code, expr *sexp.SExpressio
 
             var out []Expression
             for _, child := range expr.Children[typeStart+1:] {
-                out = append(out, MakeExpressions(module, code, child)...)
+                out = append(out, MakeExpressions(module, code, labels, child)...)
             }
 
             return append(out, &CallIndirectExpression{
@@ -295,7 +317,7 @@ func MakeExpressions(module WebAssemblyModule, code *Code, expr *sexp.SExpressio
         case "call":
             var out []Expression
             for _, child := range expr.Children[1:] {
-                out = append(out, MakeExpressions(module, code, child)...)
+                out = append(out, MakeExpressions(module, code, labels, child)...)
             }
 
             name := expr.Children[0].Value
@@ -329,7 +351,7 @@ func MakeExpressions(module WebAssemblyModule, code *Code, expr *sexp.SExpressio
 
             return append(out, &CallExpression{Index: &FunctionIndex{uint32(index)}})
         case "drop":
-            argument := MakeExpressions(module, code, expr.Children[0])
+            argument := MakeExpressions(module, code, labels, expr.Children[0])
             return append(argument, &DropExpression{})
         case "f32.const":
             value, err := strconv.ParseFloat(expr.Children[0].Value, 32)
@@ -353,13 +375,13 @@ func MakeExpressions(module WebAssemblyModule, code *Code, expr *sexp.SExpressio
             }
         case "f32.neg":
             if len(expr.Children) > 0 {
-                return append(MakeExpressions(module, code, expr.Children[0]), &F32NegExpression{})
+                return append(MakeExpressions(module, code, labels, expr.Children[0]), &F32NegExpression{})
             }
 
             return []Expression{&F32NegExpression{}}
         case "f64.neg":
             if len(expr.Children) > 0 {
-                return append(MakeExpressions(module, code, expr.Children[0]), &F64NegExpression{})
+                return append(MakeExpressions(module, code, labels, expr.Children[0]), &F64NegExpression{})
             }
 
             return []Expression{&F64NegExpression{}}
@@ -390,7 +412,7 @@ func MakeExpressions(module WebAssemblyModule, code *Code, expr *sexp.SExpressio
 
             var out []Expression
             if len(expr.Children) > 1 {
-                out = MakeExpressions(module, code, expr.Children[1])
+                out = MakeExpressions(module, code, labels, expr.Children[1])
             }
 
             return append(out, &LocalSetExpression{Local: uint32(index)})
@@ -408,7 +430,7 @@ func MakeExpressions(module WebAssemblyModule, code *Code, expr *sexp.SExpressio
 
             var out []Expression
             if len(expr.Children) > 1 {
-                out = MakeExpressions(module, code, expr.Children[1])
+                out = MakeExpressions(module, code, labels, expr.Children[1])
             }
 
             return append(out, &LocalTeeExpression{Local: uint32(index)})
@@ -430,14 +452,14 @@ func MakeExpressions(module WebAssemblyModule, code *Code, expr *sexp.SExpressio
 
             var out []Expression
             if len(expr.Children) > 1 {
-                out = MakeExpressions(module, code, expr.Children[1])
+                out = MakeExpressions(module, code, labels, expr.Children[1])
             }
 
             return append(out, &GlobalSetExpression{&GlobalIndex{Id: index}})
         case "i32.load":
             var out []Expression
             for _, child := range expr.Children {
-                out = append(out, MakeExpressions(module, code, child)...)
+                out = append(out, MakeExpressions(module, code, labels, child)...)
             }
 
             // FIXME: handle memory argument alignment and offset
@@ -445,7 +467,7 @@ func MakeExpressions(module WebAssemblyModule, code *Code, expr *sexp.SExpressio
         case "i32.load8_s":
             var out []Expression
             for _, child := range expr.Children {
-                out = append(out, MakeExpressions(module, code, child)...)
+                out = append(out, MakeExpressions(module, code, labels, child)...)
             }
 
             // FIXME: handle memory argument alignment and offset
@@ -453,7 +475,7 @@ func MakeExpressions(module WebAssemblyModule, code *Code, expr *sexp.SExpressio
         case "i32.store":
             var out []Expression
             for _, child := range expr.Children {
-                out = append(out, MakeExpressions(module, code, child)...)
+                out = append(out, MakeExpressions(module, code, labels, child)...)
             }
 
             // FIXME: handle memory argument alignment and offset
@@ -461,7 +483,7 @@ func MakeExpressions(module WebAssemblyModule, code *Code, expr *sexp.SExpressio
         case "i32.store8":
             var out []Expression
             for _, child := range expr.Children {
-                out = append(out, MakeExpressions(module, code, child)...)
+                out = append(out, MakeExpressions(module, code, labels, child)...)
             }
 
             // FIXME: handle memory argument alignment and offset
@@ -469,7 +491,7 @@ func MakeExpressions(module WebAssemblyModule, code *Code, expr *sexp.SExpressio
         case "i32.store16":
             var out []Expression
             for _, child := range expr.Children {
-                out = append(out, MakeExpressions(module, code, child)...)
+                out = append(out, MakeExpressions(module, code, labels, child)...)
             }
 
             // FIXME: handle memory argument alignment and offset
@@ -509,7 +531,7 @@ func MakeCode(module WebAssemblyModule, function *sexp.SExpression) Code {
             })
         } else {
             /* FIXME: will we ever have more than 1 expression in the body of a function? */
-            expressions := MakeExpressions(module, &out, current)
+            expressions := MakeExpressions(module, &out, data.Stack[string]{}, current)
             out.Expressions = append(out.Expressions, expressions...)
         }
     }
@@ -628,7 +650,7 @@ func (wast *Wast) CreateWasmModule() (WebAssemblyModule, error) {
                                     Type: ValueTypeFromName(localType),
                                 })
                             default:
-                                code.Expressions = append(code.Expressions, MakeExpressions(moduleOut, &code, child)...)
+                                code.Expressions = append(code.Expressions, MakeExpressions(moduleOut, &code, data.Stack[string]{}, child)...)
                         }
                     }
                 }
@@ -696,7 +718,7 @@ func (wast *Wast) CreateWasmModule() (WebAssemblyModule, error) {
                     globalType.ValueType = ValueTypeFromName(kind.Value)
                 }
 
-                valueExpr := MakeExpressions(moduleOut, nil, value)
+                valueExpr := MakeExpressions(moduleOut, nil, data.Stack[string]{}, value)
                 globalSection.AddGlobal(&globalType, valueExpr, name.Value)
             case "memory":
                 min, err := strconv.Atoi(expr.Children[0].Value)

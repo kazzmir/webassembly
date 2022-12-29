@@ -1,6 +1,6 @@
 package data
 
-type Stack[T any] struct {
+type Stack[T comparable] struct {
     Values []T
 }
 
@@ -14,6 +14,17 @@ func (stack *Stack[T]) Get(depth uint32) T {
 
 func (stack *Stack[T]) Push(value T){
     stack.Values = append(stack.Values, value)
+}
+
+/* returns the first index of 'value' starting from the top (0) */
+func (stack *Stack[T]) Find(value T) (int, bool) {
+    for i := 0; i < len(stack.Values); i++ {
+        if stack.Values[len(stack.Values)-1-i] == value {
+            return i, true
+        }
+    }
+
+    return 0, false
 }
 
 func min(a, b int) int {
