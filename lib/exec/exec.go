@@ -4,10 +4,13 @@ import (
     "fmt"
     "strings"
     "reflect"
+    "encoding/binary"
     "github.com/kazzmir/webassembly/lib/core"
     "github.com/kazzmir/webassembly/lib/data"
     "github.com/kazzmir/webassembly/lib/sexp"
 )
+
+const MemoryPageSize = 65536
 
 type RuntimeValueKind int
 
@@ -98,7 +101,7 @@ func InitializeStore(module core.WebAssemblyModule) *Store {
     memorySection := module.GetMemorySection()
     if memorySection != nil {
         for _, memory := range memorySection.Memories {
-            data := make([]byte, memory.Minimum * 65536)
+            data := make([]byte, memory.Minimum * MemoryPageSize)
             out.Memory = append(out.Memory, data)
         }
     }
@@ -281,6 +284,45 @@ func Execute(stack *data.Stack[RuntimeValue], labels *data.Stack[int], expressio
                 Kind: RuntimeValueF64,
                 F64: expr.N,
             })
+        case *core.MemoryGrowExpression:
+            if len(store.Memory) == 0 {
+                return 0, 0, fmt.Errorf("no memory defined for grow")
+            }
+
+            size := stack.Pop()
+
+            limit := frame.Module.GetMemorySection().Memories[0]
+            if limit.HasMaximum && len(store.Memory) / MemoryPageSize + int(size.I32) >= int(limit.Maximum) {
+                stack.Push(RuntimeValue{
+                    Kind: RuntimeValueI32,
+                    I32: -1,
+                })
+            } else {
+                oldSize := len(store.Memory[0]) / MemoryPageSize
+                more := make([]byte, size.I32 * MemoryPageSize)
+                store.Memory[0] = append(store.Memory[0], more...)
+                stack.Push(RuntimeValue{
+                    Kind: RuntimeValueI32,
+                    I32: int32(oldSize),
+                })
+            }
+
+        case *core.I32StoreExpression:
+            value := stack.Pop()
+            index := stack.Pop()
+
+            if len(store.Memory) == 0 {
+                return 0, 0, fmt.Errorf("no memory available for i32.store")
+            }
+
+            memory := store.Memory[0]
+
+            if int(index.I32) >= len(memory) {
+                return 0, 0, fmt.Errorf("invalid memory location: %v", index)
+            }
+
+            binary.LittleEndian.PutUint32(memory[index.I32:], uint32(value.I32))
+
         case *core.I32AddExpression:
             arg1 := stack.Pop()
             arg2 := stack.Pop()
@@ -419,10 +461,7 @@ func Execute(stack *data.Stack[RuntimeValue], labels *data.Stack[int], expressio
             if len(frame.Locals) <= int(expr.Local) {
                 return 0, 0, fmt.Errorf("unable to tee local %v when frame has %v locals", expr.Local, len(frame.Locals))
             }
-            value := stack.Pop()
-            stack.Push(frame.Locals[expr.Local])
-            stack.Push(frame.Locals[expr.Local])
-            frame.Locals[expr.Local] = value
+            frame.Locals[expr.Local] = stack.Top()
 
         case *core.LocalSetExpression:
             expr := current.(*core.LocalSetExpression)
@@ -430,8 +469,7 @@ func Execute(stack *data.Stack[RuntimeValue], labels *data.Stack[int], expressio
             if len(frame.Locals) <= int(expr.Local) {
                 return 0, 0, fmt.Errorf("unable to set local %v when frame has %v locals", expr.Local, len(frame.Locals))
             }
-            value := stack.Pop()
-            frame.Locals[expr.Local] = value
+            frame.Locals[expr.Local] = stack.Pop()
 
         case *core.GlobalSetExpression:
             expr := current.(*core.GlobalSetExpression)

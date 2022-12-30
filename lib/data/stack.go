@@ -65,6 +65,16 @@ func (stack *Stack[T]) Reduce(size int){
     stack.Values = stack.Values[0:min(size, len(stack.Values))]
 }
 
+/* return the top element without popping */
+func (stack *Stack[T]) Top() T {
+    if len(stack.Values) == 0 {
+        var x T
+        return x
+    }
+
+    return stack.Values[len(stack.Values)-1]
+}
+
 func (stack *Stack[T]) Pop() T {
     if len(stack.Values) == 0 {
         var x T
