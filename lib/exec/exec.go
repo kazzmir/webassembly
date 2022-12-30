@@ -710,7 +710,7 @@ func Execute(stack *data.Stack[RuntimeValue], labels *data.Stack[int], expressio
         case *core.I32ShlExpression:
             arg1 := stack.Pop()
             arg2 := stack.Pop()
-            stack.Push(i32(arg2.I32 << uint32(arg1.I32)))
+            stack.Push(i32(arg2.I32 << (uint32(arg1.I32) % 32)))
         case *core.I32ShlsExpression:
             arg1 := stack.Pop()
             arg2 := stack.Pop()
@@ -722,11 +722,11 @@ func Execute(stack *data.Stack[RuntimeValue], labels *data.Stack[int], expressio
         case *core.I32ShrsExpression:
             arg1 := stack.Pop()
             arg2 := stack.Pop()
-            stack.Push(i32(arg2.I32 >> uint32(arg1.I32)))
+            stack.Push(i32(arg2.I32 >> (uint32(arg1.I32) % 32)))
         case *core.I32ShruExpression:
             arg1 := stack.Pop()
             arg2 := stack.Pop()
-            stack.Push(i32(arg2.I32 >> uint32(arg1.I32)))
+            stack.Push(i32(int32(uint32(arg2.I32) >> (uint32(arg1.I32) % 32))))
         case *core.I32RotlExpression:
             arg1 := stack.Pop()
             arg2 := stack.Pop()

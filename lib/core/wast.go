@@ -74,7 +74,12 @@ func parseLiteralI32(data string) (int32, error) {
         return int32(x), nil
     }
 
-    return 0, nil
+    m, err := strconv.ParseUint(data, 0, 32)
+    if err == nil {
+        return int32(m), nil
+    }
+
+    return 0, err
 }
 
 func parseFloat64(data string) (float64, error) {
@@ -295,6 +300,7 @@ func MakeExpressions(module WebAssemblyModule, code *Code, labels data.Stack[str
         case "i32.const":
             value, err := parseLiteralI32(expr.Children[0].Value)
             if err != nil {
+                fmt.Printf("Warning: could not parse i32.const literal '%v'\n", expr.Children[0].Value)
                 return nil
             }
 
