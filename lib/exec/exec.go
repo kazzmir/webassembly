@@ -180,6 +180,22 @@ func f64(value float64) RuntimeValue {
     }
 }
 
+type ByteWriter struct {
+    data []byte
+}
+
+func NewByteWriter(data []byte) *ByteWriter {
+    return &ByteWriter{data: data}
+}
+
+func (writer *ByteWriter) Write(data []byte) (int, error) {
+    if len(data) < len(writer.data) {
+        return copy(writer.data, data), nil
+    } else {
+        return 0, fmt.Errorf("buffer too small to write to")
+    }
+}
+
 // magic value meaning we are returning from the function rather than just exiting a block
 const ReturnLabel int = 1<<30
 
@@ -345,6 +361,10 @@ func Execute(stack *data.Stack[RuntimeValue], labels *data.Stack[int], expressio
         case *core.I64ExtendI32sExpression:
             value := stack.Pop()
             stack.Push(i64(int64(value.I32)))
+        case *core.F64AddExpression:
+            a := stack.Pop()
+            b := stack.Pop()
+            stack.Push(f64(a.F64 + b.F64))
         case *core.F32ConstExpression:
             expr := current.(*core.F32ConstExpression)
             stack.Push(RuntimeValue{
@@ -357,10 +377,34 @@ func Execute(stack *data.Stack[RuntimeValue], labels *data.Stack[int], expressio
                 Kind: RuntimeValueF64,
                 F64: expr.N,
             })
+        case *core.F64LeExpression:
+            a := stack.Pop()
+            b := stack.Pop()
+            if b.F64 < a.F64 {
+                stack.Push(i32(1))
+            } else {
+                stack.Push(i32(0))
+            }
         case *core.F32EqExpression:
             a := stack.Pop()
             b := stack.Pop()
             if b.F32 == a.F32 {
+                stack.Push(i32(1))
+            } else {
+                stack.Push(i32(0))
+            }
+        case *core.F64NeExpression:
+            a := stack.Pop()
+            b := stack.Pop()
+            if b.F64 != a.F64 {
+                stack.Push(i32(1))
+            } else {
+                stack.Push(i32(0))
+            }
+        case *core.F32NeExpression:
+            a := stack.Pop()
+            b := stack.Pop()
+            if b.F32 != a.F32 {
                 stack.Push(i32(1))
             } else {
                 stack.Push(i32(0))
@@ -396,7 +440,10 @@ func Execute(stack *data.Stack[RuntimeValue], labels *data.Stack[int], expressio
             } else {
                 stack.Push(i32(0))
             }
-
+        case *core.I32WrapI64Expression:
+            /* FIXME: not sure about this one */
+            value := stack.Pop()
+            stack.Push(i64(int64(value.I32)))
         case *core.I32LtuExpression:
             a := stack.Pop()
             b := stack.Pop()
@@ -436,6 +483,21 @@ func Execute(stack *data.Stack[RuntimeValue], labels *data.Stack[int], expressio
                 })
             }
 
+        case *core.F32LoadExpression:
+            if len(store.Memory) == 0 {
+                return 0, 0, fmt.Errorf("no memory available for i32.load")
+            }
+
+            memory := store.Memory[0]
+
+            index := stack.Pop()
+
+            if int(index.I32) >= len(memory) {
+                return 0, 0, Trap(fmt.Sprintf("invalid memory index %v", index.I32))
+            }
+
+            stack.Push(f32(float32(binary.LittleEndian.Uint32(memory[index.I32:]))))
+
         case *core.I32LoadExpression:
             if len(store.Memory) == 0 {
                 return 0, 0, fmt.Errorf("no memory available for i32.load")
@@ -450,6 +512,21 @@ func Execute(stack *data.Stack[RuntimeValue], labels *data.Stack[int], expressio
             }
 
             stack.Push(i32(int32(binary.LittleEndian.Uint32(memory[index.I32:]))))
+
+        case *core.I64Load8sExpression:
+            if len(store.Memory) == 0 {
+                return 0, 0, fmt.Errorf("no memory available for i64.load8_s")
+            }
+
+            memory := store.Memory[0]
+
+            index := stack.Pop()
+
+            if int(index.I32) >= len(memory) {
+                return 0, 0, Trap(fmt.Sprintf("invalid memory index %v", index.I32))
+            }
+
+            stack.Push(i64(int64(memory[index.I32])))
 
         case *core.I32StoreExpression:
             value := stack.Pop()
@@ -466,7 +543,51 @@ func Execute(stack *data.Stack[RuntimeValue], labels *data.Stack[int], expressio
             }
 
             binary.LittleEndian.PutUint32(memory[index.I32:], uint32(value.I32))
+        case *core.I64StoreExpression:
+            value := stack.Pop()
+            index := stack.Pop()
 
+            if len(store.Memory) == 0 {
+                return 0, 0, fmt.Errorf("no memory available for i64.store")
+            }
+
+            memory := store.Memory[0]
+
+            if int(index.I32) >= len(memory) {
+                return 0, 0, fmt.Errorf("invalid memory location: %v", index)
+            }
+
+            binary.LittleEndian.PutUint64(memory[index.I32:], uint64(value.I64))
+        case *core.I64Store16Expression:
+            value := stack.Pop()
+            index := stack.Pop()
+
+            if len(store.Memory) == 0 {
+                return 0, 0, fmt.Errorf("no memory available for i64.store16")
+            }
+
+            memory := store.Memory[0]
+
+            if int(index.I32) >= len(memory) {
+                return 0, 0, fmt.Errorf("invalid memory location: %v", index)
+            }
+
+            binary.LittleEndian.PutUint16(memory[index.I32:], uint16(int16(value.I64)))
+        case *core.F64StoreExpression:
+            value := stack.Pop()
+            index := stack.Pop()
+
+            if len(store.Memory) == 0 {
+                return 0, 0, fmt.Errorf("no memory available for i32.store")
+            }
+
+            memory := store.Memory[0]
+
+            if int(index.I32) >= len(memory) {
+                return 0, 0, fmt.Errorf("invalid memory location: %v", index)
+            }
+
+            binary.Write(NewByteWriter(memory[index.I32:]), binary.LittleEndian, value.F64)
         case *core.I32EqzExpression:
             value := stack.Pop()
             result := 0

@@ -219,11 +219,60 @@ func (expr *F64ConstExpression) ConvertToWat(labels data.Stack[int], indents str
     return fmt.Sprintf("f64.const %v", expr.N)
 }
 
+type F32LoadExpression struct {
+}
+
+func (expr *F32LoadExpression) ConvertToWat(labels data.Stack[int], indents string) string {
+    return fmt.Sprintf("f32.load")
+}
+
+type F64StoreExpression struct {
+}
+
+func (expr *F64StoreExpression) ConvertToWat(labels data.Stack[int], indents string) string {
+    return fmt.Sprintf("f64.store")
+}
+
+type F64AddExpression struct {
+}
+
+func (expr *F64AddExpression) ConvertToWat(labels data.Stack[int], indents string) string {
+    return fmt.Sprintf("f64.add")
+}
+
+type F64LeExpression struct {
+}
+
+func (expr *F64LeExpression) ConvertToWat(labels data.Stack[int], indents string) string {
+    return fmt.Sprintf("f64.le")
+}
+
+type F64NeExpression struct {
+}
+
+func (expr *F64NeExpression) ConvertToWat(labels data.Stack[int], indents string) string {
+    return fmt.Sprintf("f64.ne")
+}
+
+type F32NeExpression struct {
+}
+
+func (expr *F32NeExpression) ConvertToWat(labels data.Stack[int], indents string) string {
+    return fmt.Sprintf("f32.ne")
+}
+
 type UnreachableExpression struct {
 }
 
 func (expr *UnreachableExpression) ConvertToWat(labels data.Stack[int], indents string) string {
     return fmt.Sprintf("unreachable")
+}
+
+type I32WrapI64Expression struct {
+}
+
+func (expr *I32WrapI64Expression) ConvertToWat(labels data.Stack[int], indents string) string {
+    return fmt.Sprintf("i32.wrap_i64")
 }
 
 type I32LtuExpression struct {
@@ -314,11 +363,33 @@ func (expr *I32Load8sExpression) ConvertToWat(labels data.Stack[int], indents st
     return "i32.load8_s"
 }
 
+type I64Load8sExpression struct {
+    Memory MemoryArgument
+}
+
+func (expr *I64Load8sExpression) ConvertToWat(labels data.Stack[int], indents string) string {
+    return "i64.load8_s"
+}
+
 type I32StoreExpression struct {
 }
 
 func (expr *I32StoreExpression) ConvertToWat(labels data.Stack[int], indents string) string {
     return "i32.store"
+}
+
+type I64StoreExpression struct {
+}
+
+func (expr *I64StoreExpression) ConvertToWat(labels data.Stack[int], indents string) string {
+    return "i64.store"
+}
+
+type I64Store16Expression struct {
+}
+
+func (expr *I64Store16Expression) ConvertToWat(labels data.Stack[int], indents string) string {
+    return "i64.store16"
 }
 
 type I32Store8Expression struct {

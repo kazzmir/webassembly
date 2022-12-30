@@ -441,6 +441,8 @@ func MakeExpressions(module WebAssemblyModule, code *Code, labels data.Stack[str
             return append(subexpressions(expr), &DropExpression{})
         case "i64.extend_i32_s":
             return append(subexpressions(expr), &I64ExtendI32sExpression{})
+        case "i32.wrap_i64":
+            return append(subexpressions(expr), &I32WrapI64Expression{})
         case "f32.sqrt":
             return append(subexpressions(expr), &F32SqrtExpression{})
         case "f32.eq":
@@ -465,6 +467,14 @@ func MakeExpressions(module WebAssemblyModule, code *Code, labels data.Stack[str
                     N: value,
                 },
             }
+        case "f64.le":
+            return append(subexpressions(expr), &F64LeExpression{})
+        case "f64.ne":
+            return append(subexpressions(expr), &F64NeExpression{})
+        case "f32.ne":
+            return append(subexpressions(expr), &F32NeExpression{})
+        case "f64.add":
+            return append(subexpressions(expr), &F64AddExpression{})
         case "f64.const":
             value, err := parseFloat64(expr.Children[0].Value)
             if err != nil {
@@ -583,6 +593,8 @@ func MakeExpressions(module WebAssemblyModule, code *Code, labels data.Stack[str
             return append(out, &GlobalSetExpression{&GlobalIndex{Id: index}})
         case "f32.gt":
             return append(subexpressions(expr), &F32GtExpression{})
+        case "f32.load":
+            return append(subexpressions(expr), &F32LoadExpression{})
         case "i32.load":
             var out []Expression
             for _, child := range expr.Children {
@@ -599,6 +611,14 @@ func MakeExpressions(module WebAssemblyModule, code *Code, labels data.Stack[str
 
             // FIXME: handle memory argument alignment and offset
             return append(out, &I32Load8sExpression{MemoryArgument{}})
+        case "i64.load8_s":
+            return append(subexpressions(expr), &I64Load8sExpression{MemoryArgument{}})
+        case "f64.store":
+            return append(subexpressions(expr), &F64StoreExpression{})
+        case "i64.store":
+            return append(subexpressions(expr), &I64StoreExpression{})
+        case "i64.store16":
+            return append(subexpressions(expr), &I64Store16Expression{})
         case "i32.store":
             var out []Expression
             for _, child := range expr.Children {
