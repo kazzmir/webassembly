@@ -165,6 +165,20 @@ func i64(value int64) RuntimeValue {
     }
 }
 
+func f32(value float32) RuntimeValue {
+    return RuntimeValue{
+        Kind: RuntimeValueF32,
+        F32: value,
+    }
+}
+
+func f64(value float64) RuntimeValue {
+    return RuntimeValue{
+        Kind: RuntimeValueF64,
+        F64: value,
+    }
+}
+
 // magic value meaning we are returning from the function rather than just exiting a block
 const ReturnLabel int = 1<<30
 
@@ -313,6 +327,30 @@ func Execute(stack *data.Stack[RuntimeValue], labels *data.Stack[int], expressio
                 Kind: RuntimeValueF64,
                 F64: expr.N,
             })
+        case *core.F32GtExpression:
+            a := stack.Pop()
+            b := stack.Pop()
+            if b.F32 > a.F32 {
+                stack.Push(i32(1))
+            } else {
+                stack.Push(i32(0))
+            }
+        case *core.I32LtuExpression:
+            a := stack.Pop()
+            b := stack.Pop()
+            if uint32(b.I32) < uint32(a.I32) {
+                stack.Push(i32(1))
+            } else {
+                stack.Push(i32(0))
+            }
+        case *core.I32EqExpression:
+            a := stack.Pop()
+            b := stack.Pop()
+            if b.I32 == a.I32 {
+                stack.Push(i32(1))
+            } else {
+                stack.Push(i32(0))
+            }
         case *core.MemoryGrowExpression:
             if len(store.Memory) == 0 {
                 return 0, 0, fmt.Errorf("no memory defined for grow")
@@ -371,6 +409,14 @@ func Execute(stack *data.Stack[RuntimeValue], labels *data.Stack[int], expressio
             value := stack.Pop()
             result := 0
             if value.I32 == 0 {
+                result = 1
+            }
+
+            stack.Push(i32(int32(result)))
+        case *core.I64EqzExpression:
+            value := stack.Pop()
+            result := 0
+            if value.I64 == 0 {
                 result = 1
             }
 

@@ -162,12 +162,26 @@ func (expr *F32ConstExpression) ConvertToWat(labels data.Stack[int], indents str
     return fmt.Sprintf("f32.const %v", expr.N)
 }
 
+type F32GtExpression struct {
+}
+
+func (expr *F32GtExpression) ConvertToWat(labels data.Stack[int], indents string) string {
+    return fmt.Sprintf("f32.gt")
+}
+
 type F64ConstExpression struct {
     N float64
 }
 
 func (expr *F64ConstExpression) ConvertToWat(labels data.Stack[int], indents string) string {
     return fmt.Sprintf("f64.const %v", expr.N)
+}
+
+type I32LtuExpression struct {
+}
+
+func (expr *I32LtuExpression) ConvertToWat(labels data.Stack[int], indents string) string {
+    return fmt.Sprintf("i32.lt_u")
 }
 
 type I32ConstExpression struct {
@@ -306,6 +320,13 @@ type I64EqExpression struct {
 
 func (expr *I64EqExpression) ConvertToWat(labels data.Stack[int], indents string) string {
     return "i64.eq"
+}
+
+type I64EqzExpression struct {
+}
+
+func (expr *I64EqzExpression) ConvertToWat(labels data.Stack[int], indents string) string {
+    return "i64.eqz"
 }
 
 type I32DivSignedExpression struct {

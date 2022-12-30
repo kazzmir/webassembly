@@ -65,7 +65,27 @@ func MakeFunctionType(function *sexp.SExpression) WebAssemblyFunction {
     return out
 }
 
+/* try to parse as base 10 and also as base 16 */
+func parseLiteralI32(data string) (int32, error) {
+    x, err := strconv.ParseInt(data, 0, 32)
+    if err == nil {
+        return int32(x), nil
+    }
+
+    return 0, nil
+}
+
 func MakeExpressions(module WebAssemblyModule, code *Code, labels data.Stack[string], expr *sexp.SExpression) []Expression {
+
+    /* convert everything in the given sexp to expression sequences and append them all together */
+    subexpressions := func(expr *sexp.SExpression) []Expression {
+        var out []Expression
+        for _, child := range expr.Children {
+            out = append(out, MakeExpressions(module, code, labels, child)...)
+        }
+        return out
+    }
+
     switch expr.Name {
         case "block", "loop":
             var children []Expression
@@ -218,7 +238,7 @@ func MakeExpressions(module WebAssemblyModule, code *Code, labels data.Stack[str
             }
             return append(out, &ReturnExpression{})
         case "i32.const":
-            value, err := strconv.Atoi(expr.Children[0].Value)
+            value, err := parseLiteralI32(expr.Children[0].Value)
             if err != nil {
                 return nil
             }
@@ -228,6 +248,10 @@ func MakeExpressions(module WebAssemblyModule, code *Code, labels data.Stack[str
                     N: int32(value),
                 },
             }
+        case "i32.lt_u":
+            return append(subexpressions(expr), &I32LtuExpression{})
+        case "i32.eq":
+            return append(subexpressions(expr), &I32EqExpression{})
         case "i32.ctz":
             return append(MakeExpressions(module, code, labels, expr.Children[0]), &I32CtzExpression{})
         case "i64.lt_s":
@@ -269,60 +293,25 @@ func MakeExpressions(module WebAssemblyModule, code *Code, labels data.Stack[str
         case "i64.ctz":
             return append(MakeExpressions(module, code, labels, expr.Children[0]), &I64CtzExpression{})
         case "i32.add":
-            var out []Expression
-            for _, child := range expr.Children {
-                out = append(out, MakeExpressions(module, code, labels, child)...)
-            }
-            return append(out, &I32AddExpression{})
+            return append(subexpressions(expr), &I32AddExpression{})
         case "i32.mul":
-            var out []Expression
-            for _, child := range expr.Children {
-                out = append(out, MakeExpressions(module, code, labels, child)...)
-            }
-            return append(out, &I32MulExpression{})
+            return append(subexpressions(expr), &I32MulExpression{})
         case "i64.sub":
-            var out []Expression
-            for _, child := range expr.Children {
-                out = append(out, MakeExpressions(module, code, labels, child)...)
-            }
-            return append(out, &I64SubExpression{})
+            return append(subexpressions(expr), &I64SubExpression{})
         case "i32.sub":
-            var out []Expression
-            for _, child := range expr.Children {
-                out = append(out, MakeExpressions(module, code, labels, child)...)
-            }
-            return append(out, &I32SubExpression{})
+            return append(subexpressions(expr), &I32SubExpression{})
         case "i64.eq":
-            var out []Expression
-            for _, child := range expr.Children {
-                out = append(out, MakeExpressions(module, code, labels, child)...)
-            }
-            return append(out, &I64EqExpression{})
-
+            return append(subexpressions(expr), &I64EqExpression{})
         case "i32.eqz":
-            var out []Expression
-            for _, child := range expr.Children {
-                out = append(out, MakeExpressions(module, code, labels, child)...)
-            }
-            return append(out, &I32EqzExpression{})
+            return append(subexpressions(expr), &I32EqzExpression{})
         case "i32.le_u":
-            var out []Expression
-            for _, child := range expr.Children {
-                out = append(out, MakeExpressions(module, code, labels, child)...)
-            }
-            return append(out, &I32LeuExpression{})
+            return append(subexpressions(expr), &I32LeuExpression{})
         case "i32.ne":
-            var out []Expression
-            for _, child := range expr.Children {
-                out = append(out, MakeExpressions(module, code, labels, child)...)
-            }
-            return append(out, &I32NeExpression{})
+            return append(subexpressions(expr), &I32NeExpression{})
         case "i64.mul":
-            var out []Expression
-            for _, child := range expr.Children {
-                out = append(out, MakeExpressions(module, code, labels, child)...)
-            }
-            return append(out, &I64MulExpression{})
+            return append(subexpressions(expr), &I64MulExpression{})
+        case "i64.eqz":
+            return append(subexpressions(expr), &I64EqzExpression{})
         case "memory.grow":
             var out []Expression
             for _, child := range expr.Children {
@@ -526,6 +515,8 @@ func MakeExpressions(module WebAssemblyModule, code *Code, labels data.Stack[str
             }
 
             return append(out, &GlobalSetExpression{&GlobalIndex{Id: index}})
+        case "f32.gt":
+            return append(subexpressions(expr), &F32GtExpression{})
         case "i32.load":
             var out []Expression
             for _, child := range expr.Children {
