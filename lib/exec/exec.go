@@ -317,6 +317,14 @@ func Execute(stack *data.Stack[RuntimeValue], labels *data.Stack[int], expressio
                 Kind: RuntimeValueI64,
                 I64: expr.N,
             })
+        case *core.I64LeuExpression:
+            a := stack.Pop()
+            b := stack.Pop()
+            if uint64(b.I64) <= uint64(a.I64) {
+                stack.Push(i32(1))
+            } else {
+                stack.Push(i32(0))
+            }
         case *core.F32ConstExpression:
             expr := current.(*core.F32ConstExpression)
             stack.Push(RuntimeValue{

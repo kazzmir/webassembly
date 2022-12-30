@@ -6,8 +6,10 @@ import (
     "io"
     "errors"
     "fmt"
+    "math"
     "strconv"
     "strings"
+    "regexp"
     "github.com/kazzmir/webassembly/lib/sexp"
     "github.com/kazzmir/webassembly/lib/data"
 )
@@ -73,6 +75,50 @@ func parseLiteralI32(data string) (int32, error) {
     }
 
     return 0, nil
+}
+
+func parseFloat64(data string) (float64, error) {
+    value, err := strconv.ParseFloat(data, 64)
+    if err == nil {
+        return value, nil
+    }
+
+    value2, err := strconv.ParseInt(data, 0, 64)
+    if err == nil {
+        return float64(value2), nil
+    }
+
+    hexfloatRegexp := regexp.MustCompile("(0x[0-9a-zA-Z]*)p([-+])([0-9])")
+    matches := hexfloatRegexp.FindSubmatch([]byte(data))
+    if matches != nil {
+        p := string(matches[1])
+        sign := string(matches[2])
+        exp := string(matches[3])
+
+        pValue, err := strconv.ParseInt(p, 0, 64)
+        if err != nil {
+            return 0, err
+        }
+
+        expValue, err := strconv.ParseInt(exp, 0, 64)
+        if err != nil {
+            return 0, err
+        }
+
+        if sign == "-" {
+            expValue = -expValue
+        }
+
+        out := float64(pValue) *  math.Pow(2, float64(expValue))
+        return out, nil
+    }
+
+    return 0, fmt.Errorf("unable to parse float")
+}
+
+func parseFloat32(data string) (float32, error) {
+    x, err := parseFloat64(data)
+    return float32(x), err
 }
 
 func MakeExpressions(module WebAssemblyModule, code *Code, labels data.Stack[string], expr *sexp.SExpression) []Expression {
@@ -310,6 +356,8 @@ func MakeExpressions(module WebAssemblyModule, code *Code, labels data.Stack[str
             return append(subexpressions(expr), &I32EqzExpression{})
         case "i32.le_u":
             return append(subexpressions(expr), &I32LeuExpression{})
+        case "i64.le_u":
+            return append(subexpressions(expr), &I64LeuExpression{})
         case "i32.ne":
             return append(subexpressions(expr), &I32NeExpression{})
         case "i64.mul":
@@ -402,19 +450,21 @@ func MakeExpressions(module WebAssemblyModule, code *Code, labels data.Stack[str
         case "f32.div":
             return append(subexpressions(expr), &F32DivExpression{})
         case "f32.const":
-            value, err := strconv.ParseFloat(expr.Children[0].Value, 32)
+            value, err := parseFloat32(expr.Children[0].Value)
             if err != nil {
+                fmt.Printf("Unable to parse float '%v': %v\n", expr.Children[0].Value, err)
                 return nil
             }
+
             return []Expression{
                 &F32ConstExpression{
-                    N: float32(value),
+                    N: value,
                 },
             }
         case "f64.const":
-            value, err := strconv.ParseFloat(expr.Children[0].Value, 64)
+            value, err := parseFloat64(expr.Children[0].Value)
             if err != nil {
-                return nil
+                fmt.Printf("Unable to parse float '%v': %v\n", expr.Children[0].Value, err)
             }
             return []Expression{
                 &F64ConstExpression{

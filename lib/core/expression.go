@@ -343,6 +343,13 @@ func (expr *I32LeuExpression) ConvertToWat(labels data.Stack[int], indents strin
     return "i32.le_u"
 }
 
+type I64LeuExpression struct {
+}
+
+func (expr *I64LeuExpression) ConvertToWat(labels data.Stack[int], indents string) string {
+    return "i64.le_u"
+}
+
 type I32NeExpression struct {
 }
 
