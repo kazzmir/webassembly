@@ -461,12 +461,12 @@
 (assert_return (invoke "as-br-value") (i32.const 1))
 (assert_return (invoke "as-local.set-value") (i32.const 1))
 (assert_return (invoke "as-local.tee-value") (i32.const 1))
-;;(assert_return (invoke "as-global.set-value") (i32.const 1))
-;;(assert_return (invoke "as-load-operand") (i32.const 1))
-;;
-;;(assert_return (invoke "as-unary-operand") (i32.const 0))
-;;(assert_return (invoke "as-binary-operand") (i32.const 12))
-;;(assert_return (invoke "as-test-operand") (i32.const 0))
+(assert_return (invoke "as-global.set-value") (i32.const 1))
+(assert_return (invoke "as-load-operand") (i32.const 1))
+
+(assert_return (invoke "as-unary-operand") (i32.const 0))
+(assert_return (invoke "as-binary-operand") (i32.const 12))
+(assert_return (invoke "as-test-operand") (i32.const 0))
 ;;(assert_return (invoke "as-compare-operand") (i32.const 0))
 ;;(assert_return (invoke "as-binary-operands") (i32.const 12))
 ;;(assert_return (invoke "as-compare-operands") (i32.const 0))

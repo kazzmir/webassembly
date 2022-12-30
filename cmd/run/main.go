@@ -23,10 +23,12 @@ func handleWast(wast core.Wast){
         fmt.Println(module.ConvertToWat(""))
     }
 
+    store := exec.InitializeStore(module)
+
     for _, command := range wast.Expressions {
         if command.Name == "assert_return" {
             fmt.Printf("Execute %v\n", command.String())
-            err := exec.AssertReturn(module, command)
+            err := exec.AssertReturn(module, command, store)
             if err != nil {
                 fmt.Printf("Error: %v\n", err)
             }

@@ -136,6 +136,35 @@ func Trap(reason string) error {
     return fmt.Errorf(reason)
 }
 
+/* count of trailing bits in value */
+func ctz(value uint32) int {
+    if value == 0 {
+        return 32
+    }
+
+    count := 0
+    for value & 1 != 1 {
+        count += 1
+        value = value >> 1
+    }
+
+    return count
+}
+
+func i32(value int32) RuntimeValue {
+    return RuntimeValue{
+        Kind: RuntimeValueI32,
+        I32: value,
+    }
+}
+
+func i64(value int64) RuntimeValue {
+    return RuntimeValue{
+        Kind: RuntimeValueI64,
+        I64: value,
+    }
+}
+
 // magic value meaning we are returning from the function rather than just exiting a block
 const ReturnLabel int = 1<<30
 
@@ -307,6 +336,21 @@ func Execute(stack *data.Stack[RuntimeValue], labels *data.Stack[int], expressio
                 })
             }
 
+        case *core.I32LoadExpression:
+            if len(store.Memory) == 0 {
+                return 0, 0, fmt.Errorf("no memory available for i32.load")
+            }
+
+            memory := store.Memory[0]
+
+            index := stack.Pop()
+
+            if int(index.I32) >= len(memory) {
+                return 0, 0, Trap(fmt.Sprintf("invalid memory index %v", index.I32))
+            }
+
+            stack.Push(i32(int32(binary.LittleEndian.Uint32(memory[index.I32:]))))
+
         case *core.I32StoreExpression:
             value := stack.Pop()
             index := stack.Pop()
@@ -323,13 +367,23 @@ func Execute(stack *data.Stack[RuntimeValue], labels *data.Stack[int], expressio
 
             binary.LittleEndian.PutUint32(memory[index.I32:], uint32(value.I32))
 
+        case *core.I32EqzExpression:
+            value := stack.Pop()
+            result := 0
+            if value.I32 == 0 {
+                result = 1
+            }
+
+            stack.Push(i32(int32(result)))
+
+        case *core.I32CtzExpression:
+            value := stack.Pop()
+            stack.Push(i32(int32(ctz(uint32(value.I32)))))
+
         case *core.I32AddExpression:
             arg1 := stack.Pop()
             arg2 := stack.Pop()
-            stack.Push(RuntimeValue{
-                Kind: RuntimeValueI32,
-                I32: arg1.I32 + arg2.I32,
-            })
+            stack.Push(i32(arg1.I32 + arg2.I32))
         case *core.I32SubExpression:
             arg1 := stack.Pop()
             arg2 := stack.Pop()
@@ -344,10 +398,7 @@ func Execute(stack *data.Stack[RuntimeValue], labels *data.Stack[int], expressio
             if arg2.I64 < arg1.I64 {
                 value = 1
             }
-            stack.Push(RuntimeValue{
-                Kind: RuntimeValueI32,
-                I32: int32(value),
-            })
+            stack.Push(i32(int32(value)))
         case *core.I64GtsExpression:
             arg1 := stack.Pop()
             arg2 := stack.Pop()
@@ -355,10 +406,7 @@ func Execute(stack *data.Stack[RuntimeValue], labels *data.Stack[int], expressio
             if arg2.I64 > arg1.I64 {
                 value = 1
             }
-            stack.Push(RuntimeValue{
-                Kind: RuntimeValueI32,
-                I32: int32(value),
-            })
+            stack.Push(i32(int32(value)))
         case *core.I64GtuExpression:
             arg1 := stack.Pop()
             arg2 := stack.Pop()
@@ -366,45 +414,26 @@ func Execute(stack *data.Stack[RuntimeValue], labels *data.Stack[int], expressio
             if uint64(arg2.I64) > uint64(arg1.I64) {
                 value = 1
             }
-            stack.Push(RuntimeValue{
-                Kind: RuntimeValueI32,
-                I32: int32(value),
-            })
+            stack.Push(i32(int32(value)))
         case *core.I64SubExpression:
             arg1 := stack.Pop()
             arg2 := stack.Pop()
-            stack.Push(RuntimeValue{
-                Kind: RuntimeValueI64,
-                I64: arg2.I64 - arg1.I64,
-            })
+            stack.Push(i64(arg2.I64 - arg1.I64))
         case *core.I64AddExpression:
             arg1 := stack.Pop()
             arg2 := stack.Pop()
-            stack.Push(RuntimeValue{
-                Kind: RuntimeValueI64,
-                I64: arg2.I64 + arg1.I64,
-            })
-
+            stack.Push(i64(arg2.I64 + arg1.I64))
         case *core.I64MulExpression:
             arg1 := stack.Pop()
             arg2 := stack.Pop()
-            stack.Push(RuntimeValue{
-                Kind: RuntimeValueI64,
-                I64: arg1.I64 * arg2.I64,
-            })
+            stack.Push(i64(arg1.I64 * arg2.I64))
         case *core.I64EqExpression:
             arg1 := stack.Pop()
             arg2 := stack.Pop()
             if arg1.I64 == arg2.I64 {
-                stack.Push(RuntimeValue{
-                    Kind: RuntimeValueI32,
-                    I32: 1,
-                })
+                stack.Push(i32(1))
             } else {
-                stack.Push(RuntimeValue{
-                    Kind: RuntimeValueI32,
-                    I32: 0,
-                })
+                stack.Push(i32(0))
             }
         case *core.DropExpression:
             stack.Pop()
@@ -486,7 +515,7 @@ func Execute(stack *data.Stack[RuntimeValue], labels *data.Stack[int], expressio
             value := stack.Pop()
             store.Globals[index].Value = value
         case *core.GlobalGetExpression:
-            expr := current.(*core.GlobalSetExpression)
+            expr := current.(*core.GlobalGetExpression)
             index := expr.Global.Id
 
             if int(index) >= len(store.Globals) {
@@ -672,7 +701,7 @@ func cleanName(name string) string {
 }
 
 /* handle wast-style (assert_return ...) */
-func AssertReturn(module core.WebAssemblyModule, assert sexp.SExpression) error {
+func AssertReturn(module core.WebAssemblyModule, assert sexp.SExpression, store *Store) error {
     what := assert.Children[0]
     if what.Name == "invoke" {
 
@@ -689,7 +718,7 @@ func AssertReturn(module core.WebAssemblyModule, assert sexp.SExpression) error 
             args = append(args, nextArg)
         }
 
-        store := InitializeStore(module)
+        // store := InitializeStore(module)
 
         result, err := Invoke(module, store, functionName, args)
         if err != nil {

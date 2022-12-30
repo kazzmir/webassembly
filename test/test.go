@@ -92,9 +92,11 @@ func runWastFile(path string) error {
         return fmt.Errorf("Could not create wasm module: %v", err)
     }
 
+    store := exec.InitializeStore(module)
+
     for _, command := range wast.Expressions {
         if command.Name == "assert_return" {
-            err = exec.AssertReturn(module, command)
+            err = exec.AssertReturn(module, command, store)
             if err != nil {
                 return err
             }
