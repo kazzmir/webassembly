@@ -279,7 +279,7 @@ func MakeExpressions(module WebAssemblyModule, code *Code, labels data.Stack[str
             }
             return append(out, &I64AddExpression{})
         case "i64.const":
-            value, err := strconv.ParseInt(expr.Children[0].Value, 10, 64)
+            value, err := strconv.ParseInt(expr.Children[0].Value, 0, 64)
             if err != nil {
                 return nil
             }
