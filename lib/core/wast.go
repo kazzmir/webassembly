@@ -305,10 +305,24 @@ func MakeExpressions(module WebAssemblyModule, code *Code, labels data.Stack[str
             }
         case "i32.lt_u":
             return append(subexpressions(expr), &I32LtuExpression{})
+        case "i32.lt_s":
+            return append(subexpressions(expr), &I32LtsExpression{})
+        case "i32.gt_u":
+            return append(subexpressions(expr), &I32GtuExpression{})
+        case "i32.gt_s":
+            return append(subexpressions(expr), &I32GtsExpression{})
+        case "i32.ge_s":
+            return append(subexpressions(expr), &I32GesExpression{})
+        case "i32.ge_u":
+            return append(subexpressions(expr), &I32GeuExpression{})
         case "i32.eq":
             return append(subexpressions(expr), &I32EqExpression{})
         case "i32.ctz":
-            return append(MakeExpressions(module, code, labels, expr.Children[0]), &I32CtzExpression{})
+            return append(subexpressions(expr), &I32CtzExpression{})
+        case "i32.clz":
+            return append(subexpressions(expr), &I32ClzExpression{})
+        case "i32.popcnt":
+            return append(subexpressions(expr), &I32PopcntExpression{})
         case "i64.lt_s":
             var out []Expression
             for _, child := range expr.Children {
@@ -446,6 +460,38 @@ func MakeExpressions(module WebAssemblyModule, code *Code, labels data.Stack[str
             return append(subexpressions(expr), &UnreachableExpression{})
         case "drop":
             return append(subexpressions(expr), &DropExpression{})
+        case "i32.div_s":
+            return append(subexpressions(expr), &I32DivsExpression{})
+        case "i32.div_u":
+            return append(subexpressions(expr), &I32DivuExpression{})
+        case "i32.rem_s":
+            return append(subexpressions(expr), &I32RemsExpression{})
+        case "i32.and":
+            return append(subexpressions(expr), &I32AndExpression{})
+        case "i32.or":
+            return append(subexpressions(expr), &I32OrExpression{})
+        case "i32.xor":
+            return append(subexpressions(expr), &I32XOrExpression{})
+        case "i32.shl":
+            return append(subexpressions(expr), &I32ShlExpression{})
+        case "i32.shl_s":
+            return append(subexpressions(expr), &I32ShlsExpression{})
+        case "i32.shl_u":
+            return append(subexpressions(expr), &I32ShluExpression{})
+        case "i32.shr_s":
+            return append(subexpressions(expr), &I32ShrsExpression{})
+        case "i32.shr_u":
+            return append(subexpressions(expr), &I32ShruExpression{})
+        case "i32.rem_u":
+            return append(subexpressions(expr), &I32RemuExpression{})
+        case "i32.rotl":
+            return append(subexpressions(expr), &I32RotlExpression{})
+        case "i32.rotr":
+            return append(subexpressions(expr), &I32RotrExpression{})
+        case "i32.extend8_s":
+            return append(subexpressions(expr), &I32Extend8sExpression{})
+        case "i32.extend16_s":
+            return append(subexpressions(expr), &I32Extend16sExpression{})
         case "i64.extend_i32_s":
             return append(subexpressions(expr), &I64ExtendI32sExpression{})
         case "i64.trunc_f64_s":

@@ -310,12 +310,33 @@ func (expr *I32LtuExpression) ConvertToWat(labels data.Stack[int], indents strin
     return fmt.Sprintf("i32.lt_u")
 }
 
+type I32LtsExpression struct {
+}
+
+func (expr *I32LtsExpression) ConvertToWat(labels data.Stack[int], indents string) string {
+    return fmt.Sprintf("i32.lt_s")
+}
+
 type I32ConstExpression struct {
     N int32
 }
 
 func (expr *I32ConstExpression) ConvertToWat(labels data.Stack[int], indents string) string {
     return fmt.Sprintf("i32.const %v", expr.N)
+}
+
+type I32Extend8sExpression struct {
+}
+
+func (expr *I32Extend8sExpression) ConvertToWat(labels data.Stack[int], indents string) string {
+    return "i32.extend8_s"
+}
+
+type I32Extend16sExpression struct {
+}
+
+func (expr *I32Extend16sExpression) ConvertToWat(labels data.Stack[int], indents string) string {
+    return "i32.extend16_s"
 }
 
 type I64ExtendI32sExpression struct {
@@ -344,6 +365,34 @@ type I64GtuExpression struct {
 
 func (expr *I64GtuExpression) ConvertToWat(labels data.Stack[int], indents string) string {
     return "i64.gt_u"
+}
+
+type I32GtsExpression struct {
+}
+
+func (expr *I32GtsExpression) ConvertToWat(labels data.Stack[int], indents string) string {
+    return "i32.gt_s"
+}
+
+type I32GtuExpression struct {
+}
+
+func (expr *I32GtuExpression) ConvertToWat(labels data.Stack[int], indents string) string {
+    return "i32.gt_u"
+}
+
+type I32GesExpression struct {
+}
+
+func (expr *I32GesExpression) ConvertToWat(labels data.Stack[int], indents string) string {
+    return "i32.ge_s"
+}
+
+type I32GeuExpression struct {
+}
+
+func (expr *I32GeuExpression) ConvertToWat(labels data.Stack[int], indents string) string {
+    return "i32.ge_u"
 }
 
 type I64AddExpression struct {
@@ -463,6 +512,104 @@ func (expr *I32LesExpression) ConvertToWat(labels data.Stack[int], indents strin
     return "i32.le_s"
 }
 
+type I32DivsExpression struct {
+}
+
+func (expr *I32DivsExpression) ConvertToWat(labels data.Stack[int], indents string) string {
+    return "i32.div_s"
+}
+
+type I32DivuExpression struct {
+}
+
+func (expr *I32DivuExpression) ConvertToWat(labels data.Stack[int], indents string) string {
+    return "i32.div_u"
+}
+
+type I32RemsExpression struct {
+}
+
+func (expr *I32RemsExpression) ConvertToWat(labels data.Stack[int], indents string) string {
+    return "i32.rem_s"
+}
+
+type I32RemuExpression struct {
+}
+
+func (expr *I32RemuExpression) ConvertToWat(labels data.Stack[int], indents string) string {
+    return "i32.rem_u"
+}
+
+type I32AndExpression struct {
+}
+
+func (expr *I32AndExpression) ConvertToWat(labels data.Stack[int], indents string) string {
+    return "i32.and"
+}
+
+type I32OrExpression struct {
+}
+
+func (expr *I32OrExpression) ConvertToWat(labels data.Stack[int], indents string) string {
+    return "i32.or"
+}
+
+type I32XOrExpression struct {
+}
+
+func (expr *I32XOrExpression) ConvertToWat(labels data.Stack[int], indents string) string {
+    return "i32.xor"
+}
+
+type I32ShlExpression struct {
+}
+
+func (expr *I32ShlExpression) ConvertToWat(labels data.Stack[int], indents string) string {
+    return "i32.shl"
+}
+
+type I32ShlsExpression struct {
+}
+
+func (expr *I32ShlsExpression) ConvertToWat(labels data.Stack[int], indents string) string {
+    return "i32.shl_s"
+}
+
+type I32ShluExpression struct {
+}
+
+func (expr *I32ShluExpression) ConvertToWat(labels data.Stack[int], indents string) string {
+    return "i32.shl_u"
+}
+
+type I32ShrsExpression struct {
+}
+
+func (expr *I32ShrsExpression) ConvertToWat(labels data.Stack[int], indents string) string {
+    return "i32.shr_s"
+}
+
+type I32ShruExpression struct {
+}
+
+func (expr *I32ShruExpression) ConvertToWat(labels data.Stack[int], indents string) string {
+    return "i32.shr_u"
+}
+
+type I32RotlExpression struct {
+}
+
+func (expr *I32RotlExpression) ConvertToWat(labels data.Stack[int], indents string) string {
+    return "i32.rotl"
+}
+
+type I32RotrExpression struct {
+}
+
+func (expr *I32RotrExpression) ConvertToWat(labels data.Stack[int], indents string) string {
+    return "i32.rotr"
+}
+
 type I64LeuExpression struct {
 }
 
@@ -561,6 +708,20 @@ type I32CtzExpression struct {
 
 func (expr *I32CtzExpression) ConvertToWat(labels data.Stack[int], indents string) string {
     return "i32.ctz"
+}
+
+type I32ClzExpression struct {
+}
+
+func (expr *I32ClzExpression) ConvertToWat(labels data.Stack[int], indents string) string {
+    return "i32.clz"
+}
+
+type I32PopcntExpression struct {
+}
+
+func (expr *I32PopcntExpression) ConvertToWat(labels data.Stack[int], indents string) string {
+    return "i32.popcnt"
 }
 
 type I64CtzExpression struct {

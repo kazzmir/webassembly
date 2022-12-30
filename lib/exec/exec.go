@@ -5,6 +5,7 @@ import (
     "strings"
     "reflect"
     "math"
+    "math/bits"
     "encoding/binary"
     "github.com/kazzmir/webassembly/lib/core"
     "github.com/kazzmir/webassembly/lib/data"
@@ -135,21 +136,6 @@ type Frame struct {
 
 func Trap(reason string) error {
     return fmt.Errorf(reason)
-}
-
-/* count of trailing bits in value */
-func ctz(value uint32) int {
-    if value == 0 {
-        return 32
-    }
-
-    count := 0
-    for value & 1 != 1 {
-        count += 1
-        value = value >> 1
-    }
-
-    return count
 }
 
 func i32(value int32) RuntimeValue {
@@ -366,6 +352,10 @@ func Execute(stack *data.Stack[RuntimeValue], labels *data.Stack[int], expressio
             } else {
                 stack.Push(i32(0))
             }
+        case *core.I32Extend8sExpression:
+            stack.Push(i32(int32(int8(stack.Pop().I32))))
+        case *core.I32Extend16sExpression:
+            stack.Push(i32(int32(int16(stack.Pop().I32))))
         case *core.I64ExtendI32sExpression:
             value := stack.Pop()
             stack.Push(i64(int64(value.I32)))
@@ -473,6 +463,14 @@ func Execute(stack *data.Stack[RuntimeValue], labels *data.Stack[int], expressio
             a := stack.Pop()
             b := stack.Pop()
             if uint32(b.I32) < uint32(a.I32) {
+                stack.Push(i32(1))
+            } else {
+                stack.Push(i32(0))
+            }
+        case *core.I32LtsExpression:
+            a := stack.Pop()
+            b := stack.Pop()
+            if b.I32 < a.I32 {
                 stack.Push(i32(1))
             } else {
                 stack.Push(i32(0))
@@ -673,10 +671,70 @@ func Execute(stack *data.Stack[RuntimeValue], labels *data.Stack[int], expressio
 
             stack.Push(i32(int32(result)))
 
+        case *core.I32DivsExpression:
+            a := stack.Pop()
+            b := stack.Pop()
+            stack.Push(i32(b.I32 / a.I32))
+        case *core.I32DivuExpression:
+            a := stack.Pop()
+            b := stack.Pop()
+            stack.Push(i32(int32(uint32(b.I32) / uint32(a.I32))))
         case *core.I32CtzExpression:
             value := stack.Pop()
-            stack.Push(i32(int32(ctz(uint32(value.I32)))))
-
+            stack.Push(i32(int32(bits.TrailingZeros32(uint32(value.I32)))))
+        case *core.I32ClzExpression:
+            value := stack.Pop()
+            stack.Push(i32(int32(bits.LeadingZeros32(uint32(value.I32)))))
+        case *core.I32PopcntExpression:
+            stack.Push(i32(int32(bits.OnesCount32(uint32(stack.Pop().I32)))))
+        case *core.I32RemsExpression:
+            a := stack.Pop()
+            b := stack.Pop()
+            stack.Push(i32(b.I32 % a.I32))
+        case *core.I32RemuExpression:
+            a := stack.Pop()
+            b := stack.Pop()
+            stack.Push(i32(int32(uint32(b.I32) % uint32(a.I32))))
+        case *core.I32AndExpression:
+            arg1 := stack.Pop()
+            arg2 := stack.Pop()
+            stack.Push(i32(arg1.I32 & arg2.I32))
+        case *core.I32OrExpression:
+            arg1 := stack.Pop()
+            arg2 := stack.Pop()
+            stack.Push(i32(arg1.I32 | arg2.I32))
+        case *core.I32XOrExpression:
+            arg1 := stack.Pop()
+            arg2 := stack.Pop()
+            stack.Push(i32(arg1.I32 ^ arg2.I32))
+        case *core.I32ShlExpression:
+            arg1 := stack.Pop()
+            arg2 := stack.Pop()
+            stack.Push(i32(arg2.I32 << uint32(arg1.I32)))
+        case *core.I32ShlsExpression:
+            arg1 := stack.Pop()
+            arg2 := stack.Pop()
+            stack.Push(i32(arg2.I32 << arg1.I32))
+        case *core.I32ShluExpression:
+            arg1 := stack.Pop()
+            arg2 := stack.Pop()
+            stack.Push(i32(arg2.I32 << uint32(arg1.I32)))
+        case *core.I32ShrsExpression:
+            arg1 := stack.Pop()
+            arg2 := stack.Pop()
+            stack.Push(i32(arg2.I32 >> uint32(arg1.I32)))
+        case *core.I32ShruExpression:
+            arg1 := stack.Pop()
+            arg2 := stack.Pop()
+            stack.Push(i32(arg2.I32 >> uint32(arg1.I32)))
+        case *core.I32RotlExpression:
+            arg1 := stack.Pop()
+            arg2 := stack.Pop()
+            stack.Push(i32(int32(bits.RotateLeft32(uint32(arg2.I32), int(arg1.I32)))))
+        case *core.I32RotrExpression:
+            arg1 := stack.Pop()
+            arg2 := stack.Pop()
+            stack.Push(i32(int32(bits.RotateLeft32(uint32(arg2.I32), int(-arg1.I32)))))
         case *core.I32AddExpression:
             arg1 := stack.Pop()
             arg2 := stack.Pop()
@@ -709,6 +767,38 @@ func Execute(stack *data.Stack[RuntimeValue], labels *data.Stack[int], expressio
             arg2 := stack.Pop()
             value := 0
             if uint64(arg2.I64) > uint64(arg1.I64) {
+                value = 1
+            }
+            stack.Push(i32(int32(value)))
+        case *core.I32GtsExpression:
+            arg1 := stack.Pop()
+            arg2 := stack.Pop()
+            value := 0
+            if arg2.I32 > arg1.I32 {
+                value = 1
+            }
+            stack.Push(i32(int32(value)))
+        case *core.I32GtuExpression:
+            arg1 := stack.Pop()
+            arg2 := stack.Pop()
+            value := 0
+            if uint32(arg2.I32) > uint32(arg1.I32) {
+                value = 1
+            }
+            stack.Push(i32(int32(value)))
+        case *core.I32GesExpression:
+            arg1 := stack.Pop()
+            arg2 := stack.Pop()
+            value := 0
+            if arg2.I32 >= arg1.I32 {
+                value = 1
+            }
+            stack.Push(i32(int32(value)))
+        case *core.I32GeuExpression:
+            arg1 := stack.Pop()
+            arg2 := stack.Pop()
+            value := 0
+            if uint32(arg2.I32) >= uint32(arg1.I32) {
                 value = 1
             }
             stack.Push(i32(int32(value)))
