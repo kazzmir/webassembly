@@ -101,6 +101,10 @@ func MakeExpressions(module WebAssemblyModule, code *Code, labels data.Stack[str
                     /* FIXME: handle this */
                     continue
                 }
+                if child.Name == "type" {
+                    /* FIXME: handle this */
+                    continue
+                }
                 /* (block $x ...) */
                 if i == 0 {
                     if child.Value != "" {
