@@ -169,12 +169,54 @@ func (expr *F32GtExpression) ConvertToWat(labels data.Stack[int], indents string
     return fmt.Sprintf("f32.gt")
 }
 
+type F32EqExpression struct {
+}
+
+func (expr *F32EqExpression) ConvertToWat(labels data.Stack[int], indents string) string {
+    return fmt.Sprintf("f32.eq")
+}
+
+type F32LtExpression struct {
+}
+
+func (expr *F32LtExpression) ConvertToWat(labels data.Stack[int], indents string) string {
+    return fmt.Sprintf("f32.lt")
+}
+
+type F32AddExpression struct {
+}
+
+func (expr *F32AddExpression) ConvertToWat(labels data.Stack[int], indents string) string {
+    return fmt.Sprintf("f32.add")
+}
+
+type F32SubExpression struct {
+}
+
+func (expr *F32SubExpression) ConvertToWat(labels data.Stack[int], indents string) string {
+    return fmt.Sprintf("f32.sub")
+}
+
+type F32DivExpression struct {
+}
+
+func (expr *F32DivExpression) ConvertToWat(labels data.Stack[int], indents string) string {
+    return fmt.Sprintf("f32.div")
+}
+
 type F64ConstExpression struct {
     N float64
 }
 
 func (expr *F64ConstExpression) ConvertToWat(labels data.Stack[int], indents string) string {
     return fmt.Sprintf("f64.const %v", expr.N)
+}
+
+type UnreachableExpression struct {
+}
+
+func (expr *UnreachableExpression) ConvertToWat(labels data.Stack[int], indents string) string {
+    return fmt.Sprintf("unreachable")
 }
 
 type I32LtuExpression struct {

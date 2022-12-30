@@ -288,6 +288,8 @@ func Execute(stack *data.Stack[RuntimeValue], labels *data.Stack[int], expressio
             }
             // labels.Pop()
 
+        case *core.UnreachableExpression:
+            return 0, 0, Trap("unreachable")
         case *core.SelectExpression:
             c := stack.Pop()
 
@@ -327,6 +329,26 @@ func Execute(stack *data.Stack[RuntimeValue], labels *data.Stack[int], expressio
                 Kind: RuntimeValueF64,
                 F64: expr.N,
             })
+        case *core.F32EqExpression:
+            a := stack.Pop()
+            b := stack.Pop()
+            if b.F32 == a.F32 {
+                stack.Push(i32(1))
+            } else {
+                stack.Push(i32(0))
+            }
+        case *core.F32DivExpression:
+            a := stack.Pop()
+            b := stack.Pop()
+            stack.Push(f32(b.F32 / a.F32))
+        case *core.F32SubExpression:
+            a := stack.Pop()
+            b := stack.Pop()
+            stack.Push(f32(b.F32 - a.F32))
+        case *core.F32AddExpression:
+            a := stack.Pop()
+            b := stack.Pop()
+            stack.Push(f32(b.F32 + a.F32))
         case *core.F32GtExpression:
             a := stack.Pop()
             b := stack.Pop()
@@ -335,6 +357,15 @@ func Execute(stack *data.Stack[RuntimeValue], labels *data.Stack[int], expressio
             } else {
                 stack.Push(i32(0))
             }
+        case *core.F32LtExpression:
+            a := stack.Pop()
+            b := stack.Pop()
+            if b.F32 < a.F32 {
+                stack.Push(i32(1))
+            } else {
+                stack.Push(i32(0))
+            }
+
         case *core.I32LtuExpression:
             a := stack.Pop()
             b := stack.Pop()

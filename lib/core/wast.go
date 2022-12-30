@@ -383,12 +383,20 @@ func MakeExpressions(module WebAssemblyModule, code *Code, labels data.Stack[str
             }
 
             return append(out, &CallExpression{Index: &FunctionIndex{uint32(index)}})
+        case "unreachable":
+            return append(subexpressions(expr), &UnreachableExpression{})
         case "drop":
-            var out []Expression
-            for _, child := range expr.Children {
-                out = append(out, MakeExpressions(module, code, labels, child)...)
-            }
-            return append(out, &DropExpression{})
+            return append(subexpressions(expr), &DropExpression{})
+        case "f32.eq":
+            return append(subexpressions(expr), &F32EqExpression{})
+        case "f32.lt":
+            return append(subexpressions(expr), &F32LtExpression{})
+        case "f32.add":
+            return append(subexpressions(expr), &F32AddExpression{})
+        case "f32.sub":
+            return append(subexpressions(expr), &F32SubExpression{})
+        case "f32.div":
+            return append(subexpressions(expr), &F32DivExpression{})
         case "f32.const":
             value, err := strconv.ParseFloat(expr.Children[0].Value, 32)
             if err != nil {
