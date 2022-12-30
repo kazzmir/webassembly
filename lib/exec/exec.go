@@ -350,6 +350,14 @@ func Execute(stack *data.Stack[RuntimeValue], labels *data.Stack[int], expressio
             } else {
                 stack.Push(i32(0))
             }
+        case *core.I32LesExpression:
+            a := stack.Pop()
+            b := stack.Pop()
+            if b.I32 <= a.I32 {
+                stack.Push(i32(1))
+            } else {
+                stack.Push(i32(0))
+            }
         case *core.I32NeExpression:
             a := stack.Pop()
             b := stack.Pop()
@@ -460,7 +468,7 @@ func Execute(stack *data.Stack[RuntimeValue], labels *data.Stack[int], expressio
         case *core.I32WrapI64Expression:
             /* FIXME: not sure about this one */
             value := stack.Pop()
-            stack.Push(i64(int64(value.I32)))
+            stack.Push(i32(int32(value.I64 % int64(math.MaxInt32))))
         case *core.I32LtuExpression:
             a := stack.Pop()
             b := stack.Pop()
@@ -502,7 +510,7 @@ func Execute(stack *data.Stack[RuntimeValue], labels *data.Stack[int], expressio
 
         case *core.F32LoadExpression:
             if len(store.Memory) == 0 {
-                return 0, 0, fmt.Errorf("no memory available for i32.load")
+                return 0, 0, fmt.Errorf("no memory available for f32.load")
             }
 
             memory := store.Memory[0]
@@ -530,6 +538,20 @@ func Execute(stack *data.Stack[RuntimeValue], labels *data.Stack[int], expressio
 
             stack.Push(i32(int32(binary.LittleEndian.Uint32(memory[index.I32:]))))
 
+        case *core.I32Load8sExpression:
+            if len(store.Memory) == 0 {
+                return 0, 0, fmt.Errorf("no memory available for i64.load8_s")
+            }
+
+            memory := store.Memory[0]
+
+            index := stack.Pop()
+
+            if int(index.I32) >= len(memory) {
+                return 0, 0, Trap(fmt.Sprintf("invalid memory index %v", index.I32))
+            }
+
+            stack.Push(i32(int32(memory[index.I32])))
         case *core.I64Load8sExpression:
             if len(store.Memory) == 0 {
                 return 0, 0, fmt.Errorf("no memory available for i64.load8_s")
@@ -544,7 +566,6 @@ func Execute(stack *data.Stack[RuntimeValue], labels *data.Stack[int], expressio
             }
 
             stack.Push(i64(int64(memory[index.I32])))
-
         case *core.I32StoreExpression:
             value := stack.Pop()
             index := stack.Pop()
@@ -560,6 +581,36 @@ func Execute(stack *data.Stack[RuntimeValue], labels *data.Stack[int], expressio
             }
 
             binary.LittleEndian.PutUint32(memory[index.I32:], uint32(value.I32))
+        case *core.I32Store16Expression:
+            value := stack.Pop()
+            index := stack.Pop()
+
+            if len(store.Memory) == 0 {
+                return 0, 0, fmt.Errorf("no memory available for i32.store")
+            }
+
+            memory := store.Memory[0]
+
+            if int(index.I32) >= len(memory) {
+                return 0, 0, fmt.Errorf("invalid memory location: %v", index)
+            }
+
+            binary.LittleEndian.PutUint16(memory[index.I32:], uint16(int16(value.I32)))
+        case *core.I32Store8Expression:
+            value := stack.Pop()
+            index := stack.Pop()
+
+            if len(store.Memory) == 0 {
+                return 0, 0, fmt.Errorf("no memory available for i32.store")
+            }
+
+            memory := store.Memory[0]
+
+            if int(index.I32) >= len(memory) {
+                return 0, 0, fmt.Errorf("invalid memory location: %v", index)
+            }
+
+            memory[index.I32] = byte(value.I32)
         case *core.I64StoreExpression:
             value := stack.Pop()
             index := stack.Pop()
@@ -977,8 +1028,30 @@ func AssertReturn(module core.WebAssemblyModule, assert sexp.SExpression, store 
             if err != nil {
                 return err
             } else {
+                fail := false
+
                 if len(result) != 1 || result[0] != expected {
-                    return fmt.Errorf("result=%v expected=%v", result, expected)
+
+                    fail = true
+
+                    /* special-case handling for nan, inf */
+                    if result[0].Kind == expected.Kind {
+                        switch result[0].Kind {
+                            case RuntimeValueF32:
+                                if math.IsNaN(float64(result[0].F32)) && math.IsNaN(float64(expected.F32)) {
+                                    fail = false
+                                }
+                            case RuntimeValueF64:
+                                if math.IsNaN(result[0].F64) && math.IsNaN(expected.F64) {
+                                    fail = false
+                                }
+                        }
+                    }
+
+
+                    if fail {
+                        return fmt.Errorf("result=%v expected=%v", result, expected)
+                    }
                 }
             }
         }

@@ -88,6 +88,11 @@ func parseFloat64(data string) (float64, error) {
         return float64(value2), nil
     }
 
+    /* FIXME: handle NaN payload */
+    if strings.HasPrefix(data, "-nan") || strings.HasPrefix(data, "nan") {
+        return math.NaN(), nil
+    }
+
     hexfloatRegexp := regexp.MustCompile("(0x[0-9a-zA-Z]*)p([-+])([0-9])")
     matches := hexfloatRegexp.FindSubmatch([]byte(data))
     if matches != nil {
@@ -356,6 +361,8 @@ func MakeExpressions(module WebAssemblyModule, code *Code, labels data.Stack[str
             return append(subexpressions(expr), &I32EqzExpression{})
         case "i32.le_u":
             return append(subexpressions(expr), &I32LeuExpression{})
+        case "i32.le_s":
+            return append(subexpressions(expr), &I32LesExpression{})
         case "i64.le_u":
             return append(subexpressions(expr), &I64LeuExpression{})
         case "i32.ne":
