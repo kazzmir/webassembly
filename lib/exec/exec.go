@@ -4,6 +4,7 @@ import (
     "fmt"
     "strings"
     "reflect"
+    "math"
     "encoding/binary"
     "github.com/kazzmir/webassembly/lib/core"
     "github.com/kazzmir/webassembly/lib/data"
@@ -325,6 +326,25 @@ func Execute(stack *data.Stack[RuntimeValue], labels *data.Stack[int], expressio
             } else {
                 stack.Push(i32(0))
             }
+        case *core.I32LeuExpression:
+            a := stack.Pop()
+            b := stack.Pop()
+            if uint32(b.I32) <= uint32(a.I32) {
+                stack.Push(i32(1))
+            } else {
+                stack.Push(i32(0))
+            }
+        case *core.I32NeExpression:
+            a := stack.Pop()
+            b := stack.Pop()
+            if b.I32 != a.I32 {
+                stack.Push(i32(1))
+            } else {
+                stack.Push(i32(0))
+            }
+        case *core.I64ExtendI32sExpression:
+            value := stack.Pop()
+            stack.Push(i64(int64(value.I32)))
         case *core.F32ConstExpression:
             expr := current.(*core.F32ConstExpression)
             stack.Push(RuntimeValue{
@@ -357,6 +377,9 @@ func Execute(stack *data.Stack[RuntimeValue], labels *data.Stack[int], expressio
             a := stack.Pop()
             b := stack.Pop()
             stack.Push(f32(b.F32 + a.F32))
+        case *core.F32SqrtExpression:
+            value := stack.Pop()
+            stack.Push(f32(float32(math.Sqrt(float64(value.F32)))))
         case *core.F32GtExpression:
             a := stack.Pop()
             b := stack.Pop()

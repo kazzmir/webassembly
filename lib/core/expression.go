@@ -190,6 +190,13 @@ func (expr *F32AddExpression) ConvertToWat(labels data.Stack[int], indents strin
     return fmt.Sprintf("f32.add")
 }
 
+type F32SqrtExpression struct {
+}
+
+func (expr *F32SqrtExpression) ConvertToWat(labels data.Stack[int], indents string) string {
+    return fmt.Sprintf("f32.sqrt")
+}
+
 type F32SubExpression struct {
 }
 
@@ -232,6 +239,13 @@ type I32ConstExpression struct {
 
 func (expr *I32ConstExpression) ConvertToWat(labels data.Stack[int], indents string) string {
     return fmt.Sprintf("i32.const %v", expr.N)
+}
+
+type I64ExtendI32sExpression struct {
+}
+
+func (expr *I64ExtendI32sExpression) ConvertToWat(labels data.Stack[int], indents string) string {
+    return "i64.extend_i32_s"
 }
 
 type I64LtsExpression struct {

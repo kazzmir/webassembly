@@ -439,6 +439,10 @@ func MakeExpressions(module WebAssemblyModule, code *Code, labels data.Stack[str
             return append(subexpressions(expr), &UnreachableExpression{})
         case "drop":
             return append(subexpressions(expr), &DropExpression{})
+        case "i64.extend_i32_s":
+            return append(subexpressions(expr), &I64ExtendI32sExpression{})
+        case "f32.sqrt":
+            return append(subexpressions(expr), &F32SqrtExpression{})
         case "f32.eq":
             return append(subexpressions(expr), &F32EqExpression{})
         case "f32.lt":
