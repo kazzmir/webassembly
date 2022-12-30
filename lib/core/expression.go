@@ -254,6 +254,34 @@ func (expr *F64NeExpression) ConvertToWat(labels data.Stack[int], indents string
     return fmt.Sprintf("f64.ne")
 }
 
+type F64ConvertI64uExpression struct {
+}
+
+func (expr *F64ConvertI64uExpression) ConvertToWat(labels data.Stack[int], indents string) string {
+    return fmt.Sprintf("f64.convert_i64_u")
+}
+
+type F64PromoteF32Expression struct {
+}
+
+func (expr *F64PromoteF32Expression) ConvertToWat(labels data.Stack[int], indents string) string {
+    return fmt.Sprintf("f64.promote_f32")
+}
+
+type F64ConvertI32uExpression struct {
+}
+
+func (expr *F64ConvertI32uExpression) ConvertToWat(labels data.Stack[int], indents string) string {
+    return fmt.Sprintf("f64.convert_i32_u")
+}
+
+type F64ConvertI32sExpression struct {
+}
+
+func (expr *F64ConvertI32sExpression) ConvertToWat(labels data.Stack[int], indents string) string {
+    return fmt.Sprintf("f64.convert_i32_s")
+}
+
 type F32NeExpression struct {
 }
 

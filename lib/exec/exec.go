@@ -440,6 +440,20 @@ func Execute(stack *data.Stack[RuntimeValue], labels *data.Stack[int], expressio
             } else {
                 stack.Push(i32(0))
             }
+        case *core.F32NegExpression:
+            stack.Push(f32(-stack.Pop().F32))
+        case *core.F64NegExpression:
+            stack.Push(f64(-stack.Pop().F64))
+        case *core.F64ConvertI64uExpression:
+            stack.Push(f64(float64(stack.Pop().I64)))
+        case *core.F64ConvertI32uExpression:
+            /* FIXME: check this */
+            stack.Push(f64(float64(uint32(stack.Pop().I32))))
+        case *core.F64ConvertI32sExpression:
+            stack.Push(f64(float64(stack.Pop().I32)))
+        case *core.F64PromoteF32Expression:
+            /* FIXME: handle NaN stuff */
+            stack.Push(f64(float64(stack.Pop().F32)))
         case *core.I32WrapI64Expression:
             /* FIXME: not sure about this one */
             value := stack.Pop()
