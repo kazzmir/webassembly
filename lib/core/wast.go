@@ -274,7 +274,12 @@ func MakeExpressions(module WebAssemblyModule, code *Code, labels data.Stack[str
                 out = append(out, MakeExpressions(module, code, labels, child)...)
             }
             return append(out, &I32AddExpression{})
-
+        case "i32.mul":
+            var out []Expression
+            for _, child := range expr.Children {
+                out = append(out, MakeExpressions(module, code, labels, child)...)
+            }
+            return append(out, &I32MulExpression{})
         case "i64.sub":
             var out []Expression
             for _, child := range expr.Children {
@@ -765,7 +770,7 @@ func (wast *Wast) CreateWasmModule() (WebAssemblyModule, error) {
             case "table":
                 // so far this handles an inline table expression with funcref elements already given
                 reftype := expr.Children[0]
-                if reftype.Value == "funcrec" {
+                if reftype.Value == "funcref" {
                     elements := expr.Children[1]
                     if elements.Name == "elem" {
                         tableId := tableSection.AddTable(TableType{

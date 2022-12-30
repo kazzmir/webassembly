@@ -252,6 +252,11 @@ func Execute(stack *data.Stack[RuntimeValue], labels *data.Stack[int], expressio
             } else {
                 stack.Push(v2)
             }
+        case *core.I32MulExpression:
+            stack.Push(RuntimeValue{
+                Kind: RuntimeValueI32,
+                I32: stack.Pop().I32 * stack.Pop().I32,
+            })
         case *core.I32ConstExpression:
             expr := current.(*core.I32ConstExpression)
             stack.Push(RuntimeValue{
@@ -456,6 +461,52 @@ func Execute(stack *data.Stack[RuntimeValue], labels *data.Stack[int], expressio
 
             stack.Push(store.Globals[index].Value)
 
+        case *core.CallIndirectExpression:
+            expr := current.(*core.CallIndirectExpression)
+            if int(expr.Table.Id) >= len(store.Tables) {
+                return 0, 0, fmt.Errorf("invalid table index %v", expr.Table.Id)
+            }
+
+            table := store.Tables[expr.Table.Id]
+            index := stack.Pop()
+
+            if index.Kind != RuntimeValueI32 {
+                return 0, 0, fmt.Errorf("call indirect stack value must be an i32 but was %v", index)
+            }
+
+            if index.I32 < 0 || int(index.I32) >= len(table.Elements) {
+                return 0, 0, fmt.Errorf("invalid table element index %v", index)
+            }
+
+            element := table.Elements[index.I32]
+            switch element.(type) {
+                case *core.FunctionIndex:
+                    ref := element.(*core.FunctionIndex)
+                    functionTypeIndex := frame.Module.GetFunctionSection().GetFunctionType(int(ref.Id))
+                    functionType := frame.Module.GetTypeSection().GetFunction(functionTypeIndex.Id)
+
+                    args := stack.PopN(len(functionType.InputTypes))
+
+                    code := frame.Module.GetCodeSection().GetFunction(ref.Id)
+
+                    for _, local := range code.Locals {
+                        args = append(args, MakeRuntimeValue(local.Type))
+                    }
+
+                    out, err := RunCode(code, Frame{
+                        Locals: args,
+                        Module: frame.Module,
+                    }, functionType, store)
+
+                    if err != nil {
+                        return 0, 0, err
+                    }
+
+                    stack.PushAll(out)
+                default:
+                    return 0, 0, fmt.Errorf("unknown element for call indirect %v", reflect.TypeOf(element))
+            }
+
         case *core.CallExpression:
             /* create a new stack frame, pop N values off the stack and put them in the locals of the frame.
              * then invoke the code of the function with the new frame.
@@ -466,14 +517,6 @@ func Execute(stack *data.Stack[RuntimeValue], labels *data.Stack[int], expressio
             functionTypeIndex := frame.Module.GetFunctionSection().GetFunctionType(int(expr.Index.Id))
             functionType := frame.Module.GetTypeSection().GetFunction(functionTypeIndex.Id)
 
-            /*
-            var args []RuntimeValue
-            for _, input := range functionType.InputTypes {
-                // FIXME: check that the stack contains the same type as 'input'
-                _ = input
-                args = append(args, stack.Pop())
-            }
-            */
             args := stack.PopN(len(functionType.InputTypes))
 
             code := frame.Module.GetCodeSection().GetFunction(expr.Index.Id)
