@@ -451,6 +451,9 @@ func Execute(stack *data.Stack[RuntimeValue], labels *data.Stack[int], expressio
             stack.Push(f64(float64(uint32(stack.Pop().I32))))
         case *core.F64ConvertI32sExpression:
             stack.Push(f64(float64(stack.Pop().I32)))
+        case *core.I64TruncF64sExpression:
+            /* FIXME: handle NaN and infinity */
+            stack.Push(i64(int64(stack.Pop().F64)))
         case *core.F64PromoteF32Expression:
             /* FIXME: handle NaN stuff */
             stack.Push(f64(float64(stack.Pop().F32)))

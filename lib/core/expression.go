@@ -563,6 +563,13 @@ func (expr *I64CtzExpression) ConvertToWat(labels data.Stack[int], indents strin
     return "i64.ctz"
 }
 
+type I64TruncF64sExpression struct {
+}
+
+func (expr *I64TruncF64sExpression) ConvertToWat(labels data.Stack[int], indents string) string {
+    return "i64.trunc_f64_s"
+}
+
 type LocalSetExpression struct {
     Local uint32
 }
