@@ -87,19 +87,27 @@ func runWastFile(path string) error {
         return err
     }
 
-    module, err := wast.CreateWasmModule()
-    if err != nil {
-        return fmt.Errorf("Could not create wasm module: %v", err)
-    }
-
-    store := exec.InitializeStore(module)
+    var module core.WebAssemblyModule
+    var store *exec.Store
 
     for _, command := range wast.Expressions {
-        if command.Name == "assert_return" {
-            err = exec.AssertReturn(module, command, store)
-            if err != nil {
-                return err
-            }
+        switch command.Name {
+            case "module":
+                var err error
+                module, err = core.CreateWasmModule(&command)
+                if err != nil {
+                    return err
+                }
+                store = exec.InitializeStore(module)
+            case "assert_return":
+                if store == nil {
+                    return fmt.Errorf("Error: no module defined")
+                }
+
+                err := exec.AssertReturn(module, command, store)
+                if err != nil {
+                    return err
+                }
         }
     }
 

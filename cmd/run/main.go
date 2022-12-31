@@ -15,23 +15,31 @@ func cleanName(name string) string {
 }
 
 func handleWast(wast core.Wast){
-    module, err := wast.CreateWasmModule()
-    if err != nil {
-        log.Printf("Error: %v", err)
-        return
-    } else {
-        fmt.Println(module.ConvertToWat(""))
-    }
 
-    store := exec.InitializeStore(module)
+    var module core.WebAssemblyModule
+    var store *exec.Store
 
     for _, command := range wast.Expressions {
-        if command.Name == "assert_return" {
-            fmt.Printf("Execute %v\n", command.String())
-            err := exec.AssertReturn(module, command, store)
-            if err != nil {
-                fmt.Printf("Error: %v\n", err)
-            }
+        switch command.Name {
+            case "module":
+                var err error
+                module, err = core.CreateWasmModule(&command)
+                if err != nil {
+                    log.Printf("Error creating module: %v", err)
+                    return
+                }
+                store = exec.InitializeStore(module)
+            case "assert_return":
+                if store == nil {
+                    fmt.Printf("Error: no module defined\n")
+                    continue
+                }
+
+                fmt.Printf("Execute %v\n", command.String())
+                err := exec.AssertReturn(module, command, store)
+                if err != nil {
+                    fmt.Printf("Error: %v\n", err)
+                }
         }
     }
 }

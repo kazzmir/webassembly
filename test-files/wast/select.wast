@@ -515,17 +515,17 @@
 
 ;; Flat syntax
 
-(module
-  (table 1 funcref)
-  (func (result i32) unreachable select)
-  (func (result i32) unreachable select nop)
-  (func (result i32) unreachable select (select))
-  (func (result i32) unreachable select select)
-  (func (result i32) unreachable select select select)
-  (func (result i32) unreachable select (result i32))
-  (func (result i32) unreachable select (result i32) (result))
-  (func (result i32) unreachable select (result i32) (result) select)
-  (func (result i32) unreachable select (result) (result i32) select (result i32))
-  (func (result i32) unreachable select call_indirect)
-  (func (result i32) unreachable select call_indirect select)
-)
+;; (module
+;;   (table 1 funcref)
+;;   (func (result i32) unreachable select)
+;;   (func (result i32) unreachable select nop)
+;;   (func (result i32) unreachable select (select))
+;;   (func (result i32) unreachable select select)
+;;   (func (result i32) unreachable select select select)
+;;   (func (result i32) unreachable select (result i32))
+;;   (func (result i32) unreachable select (result i32) (result))
+;;   (func (result i32) unreachable select (result i32) (result) select)
+;;   (func (result i32) unreachable select (result) (result i32) select (result i32))
+;;   (func (result i32) unreachable select call_indirect)
+;;   (func (result i32) unreachable select call_indirect select)
+;; )

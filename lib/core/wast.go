@@ -17,8 +17,6 @@ import (
 // wast is a super set of .wat in that it can contain (module ...) expressions as well as other things
 // like (assert_return ...) and other things
 type Wast struct {
-    Module sexp.SExpression
-    HasModule bool
     Expressions []sexp.SExpression
 }
 
@@ -824,11 +822,7 @@ func doSecondPass(code *Code){
     }
 }
 
-func (wast *Wast) CreateWasmModule() (WebAssemblyModule, error) {
-    if wast.Module.Name != "module" {
-        return WebAssemblyModule{}, fmt.Errorf("No module defined")
-    }
-
+func CreateWasmModule(module *sexp.SExpression) (WebAssemblyModule, error) {
     var moduleOut WebAssemblyModule
     typeSection := NewWebAssemblyTypeSection()
     functionSection := WebAssemblyFunctionSectionCreate()
@@ -848,7 +842,7 @@ func (wast *Wast) CreateWasmModule() (WebAssemblyModule, error) {
     moduleOut.AddSection(memorySection)
     moduleOut.AddSection(exportSection)
 
-    for _, expr := range wast.Module.Children {
+    for _, expr := range module.Children {
         /*
         if expr.Name == "func" {
             fmt.Printf("Func: %v\n", expr)
@@ -955,31 +949,33 @@ func (wast *Wast) CreateWasmModule() (WebAssemblyModule, error) {
                 tableName := ""
                 for i := 0; i < len(expr.Children); i++ {
                     if expr.Children[i].Value == "funcref" {
-                        elements := expr.Children[i+1]
-                        if elements.Name == "elem" {
-                            tableId := tableSection.AddTable(TableType{
-                                Limit: Limit{
-                                    Minimum: uint32(len(elements.Children)),
-                                    Maximum: uint32(len(elements.Children)),
-                                    HasMaximum: true,
-                                },
-                                RefType: RefTypeFunction,
-                                Name: tableName,
-                            })
+                        if len(expr.Children) > i+1 {
+                            elements := expr.Children[i+1]
+                            if elements.Name == "elem" {
+                                tableId := tableSection.AddTable(TableType{
+                                    Limit: Limit{
+                                        Minimum: uint32(len(elements.Children)),
+                                        Maximum: uint32(len(elements.Children)),
+                                        HasMaximum: true,
+                                    },
+                                    RefType: RefTypeFunction,
+                                    Name: tableName,
+                                })
 
-                            var functions []*FunctionIndex
-                            for _, element := range elements.Children {
-                                if element.Value != "" {
-                                    functionIndex, ok := functionSection.GetFunctionIndexByName(element.Value)
-                                    if ok {
-                                        functions = append(functions, &FunctionIndex{Id: uint32(functionIndex)})
-                                    } else {
-                                        fmt.Printf("Warning: unable to find funcref '%v'\n", element.Value)
+                                var functions []*FunctionIndex
+                                for _, element := range elements.Children {
+                                    if element.Value != "" {
+                                        functionIndex, ok := functionSection.GetFunctionIndexByName(element.Value)
+                                        if ok {
+                                            functions = append(functions, &FunctionIndex{Id: uint32(functionIndex)})
+                                        } else {
+                                            fmt.Printf("Warning: unable to find funcref '%v'\n", element.Value)
+                                        }
                                     }
                                 }
-                            }
 
-                            elementSection.AddFunctionRefInit(functions, int(tableId), []Expression{&I32ConstExpression{N: 0}})
+                                elementSection.AddFunctionRefInit(functions, int(tableId), []Expression{&I32ConstExpression{N: 0}})
+                            }
                         }
 
                         break
@@ -1020,12 +1016,7 @@ func ParseWastFile(path string) (Wast, error) {
             return Wast{}, err
         }
         
-        if next.Name == "module" && !wast.HasModule {
-            wast.Module = next
-            wast.HasModule = true
-        } else {
-            wast.Expressions = append(wast.Expressions, next)
-        }
+        wast.Expressions = append(wast.Expressions, next)
     }
 
     return wast, nil
