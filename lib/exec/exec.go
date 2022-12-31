@@ -839,7 +839,7 @@ func Execute(stack *data.Stack[RuntimeValue], labels *data.Stack[int], expressio
                 return 0, 0, fmt.Errorf("br_table had no labels")
             }
 
-            if int(value.I32) < len(expr.Labels) {
+            if value.I32 >= 0 && int(value.I32) < len(expr.Labels) {
                 return 0, int(expr.Labels[value.I32])+1, nil
             }
 

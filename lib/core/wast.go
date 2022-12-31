@@ -142,6 +142,20 @@ func MakeExpressions(module WebAssemblyModule, code *Code, labels data.Stack[str
         return out
     }
 
+    parseLabel := func(name string) (int, error) {
+        label, err := strconv.Atoi(name)
+        if err != nil {
+            index, ok := labels.Find(name)
+            if ok {
+                return index, nil
+            }
+
+            return 0, err
+        }
+
+        return label, nil
+    }
+
     switch expr.Name {
         case "block", "loop":
             var children []Expression
@@ -260,14 +274,9 @@ func MakeExpressions(module WebAssemblyModule, code *Code, labels data.Stack[str
                 out = append(out, MakeExpressions(module, code, labels, child)...)
             }
 
-            label, err := strconv.Atoi(expr.Children[0].Value)
+            label, err := parseLabel(expr.Children[0].Value)
             if err != nil {
-
-                index, ok := labels.Find(expr.Children[0].Value)
-                if ok {
-                    return append(out, &BranchIfExpression{Label: uint32(index)})
-                }
-
+                fmt.Printf("Error: could not parse label '%v': %v\n", expr.Children[0].Value, err)
                 return nil
             }
 
@@ -278,8 +287,10 @@ func MakeExpressions(module WebAssemblyModule, code *Code, labels data.Stack[str
             // (br_table l1 l2 l3 (expr ...) (expr ...))
             for _, child := range expr.Children {
                 if child.Value != "" {
-                    label, err := strconv.Atoi(child.Value)
+                    label, err := parseLabel(child.Value)
+
                     if err != nil {
+                        fmt.Printf("Error: could not parse label '%v': %v\n", child.Value, err)
                         return nil
                     }
 
