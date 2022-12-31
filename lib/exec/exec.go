@@ -1097,12 +1097,14 @@ func AssertReturn(module core.WebAssemblyModule, assert sexp.SExpression, store 
         var args []RuntimeValue
         for _, arg := range what.Children[1:] {
             expressions := core.MakeExpressions(module, nil, data.Stack[string]{}, arg)
-            nextArg, err := EvaluateOne(expressions[0])
-            if err != nil {
-                return err
-            }
+            if len(expressions) > 0 {
+                nextArg, err := EvaluateOne(expressions[0])
+                if err != nil {
+                    return err
+                }
 
-            args = append(args, nextArg)
+                args = append(args, nextArg)
+            }
         }
 
         // store := InitializeStore(module)

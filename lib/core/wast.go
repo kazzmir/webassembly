@@ -18,6 +18,7 @@ import (
 // like (assert_return ...) and other things
 type Wast struct {
     Module sexp.SExpression
+    HasModule bool
     Expressions []sexp.SExpression
 }
 
@@ -238,13 +239,7 @@ func MakeExpressions(module WebAssemblyModule, code *Code, labels data.Stack[str
                     ExpectedType: expectedType,
                 })
         case "select":
-            var out []Expression
-
-            for _, child := range expr.Children {
-                out = append(out, MakeExpressions(module, code, labels, child)...)
-            }
-
-            return append(out, &SelectExpression{})
+            return append(subexpressions(expr), &SelectExpression{})
         case "br":
             var out []Expression
 
@@ -987,8 +982,9 @@ func ParseWastFile(path string) (Wast, error) {
             return Wast{}, err
         }
         
-        if next.Name == "module" {
+        if next.Name == "module" && !wast.HasModule {
             wast.Module = next
+            wast.HasModule = true
         } else {
             wast.Expressions = append(wast.Expressions, next)
         }
