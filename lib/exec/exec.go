@@ -22,6 +22,8 @@ const (
     RuntimeValueI64 = 2
     RuntimeValueF32 = 3
     RuntimeValueF64 = 4
+    RuntimeValueRefFunc = 5
+    RuntimeValueRefExtern = 6
 )
 
 /* represents values during the execution of the webassembly virtual machine */
@@ -31,6 +33,19 @@ type RuntimeValue struct {
     I64 int64
     F32 float32
     F64 float64
+    RefFunc uint32
+    RefExtern uint32
+}
+
+const RuntimeValueRefNull = math.MaxUint32
+
+func (value RuntimeValue) IsNull() bool {
+    switch value.Kind {
+        case RuntimeValueRefFunc: return value.RefFunc == RuntimeValueRefNull
+        case RuntimeValueRefExtern: return value.RefExtern == RuntimeValueRefNull
+    }
+
+    return false
 }
 
 func MakeRuntimeValue(kind core.ValueType) RuntimeValue {
@@ -39,6 +54,8 @@ func MakeRuntimeValue(kind core.ValueType) RuntimeValue {
         case core.ValueTypeI64: return RuntimeValue{Kind: RuntimeValueI64}
         case core.ValueTypeF32: return RuntimeValue{Kind: RuntimeValueF32}
         case core.ValueTypeF64: return RuntimeValue{Kind: RuntimeValueF64}
+        case core.ValueTypeRefFunc: return RuntimeValue{Kind: RuntimeValueRefFunc}
+        case core.ValueTypeRefExtern: return RuntimeValue{Kind: RuntimeValueRefFunc}
     }
 
     return RuntimeValue{Kind: RuntimeValueNone}
@@ -51,6 +68,8 @@ func (value RuntimeValue) String() string {
         case RuntimeValueI64: return fmt.Sprintf("%v:i64", value.I64)
         case RuntimeValueF32: return fmt.Sprintf("%v:f32", value.F32)
         case RuntimeValueF64: return fmt.Sprintf("%v:f64", value.F64)
+        case RuntimeValueRefFunc: return fmt.Sprintf("%v:func", value.RefFunc)
+        case RuntimeValueRefExtern: return fmt.Sprintf("%v:extern", value.RefExtern)
     }
 
     return "?"
@@ -136,6 +155,24 @@ type Frame struct {
 
 func Trap(reason string) error {
     return fmt.Errorf(reason)
+}
+
+func refFunc(value uint32) RuntimeValue {
+    return RuntimeValue{
+        Kind: RuntimeValueRefFunc,
+        RefFunc: value,
+    }
+}
+
+func refExtern(value uint32) RuntimeValue {
+    return RuntimeValue{
+        Kind: RuntimeValueRefExtern,
+        RefExtern: value,
+    }
+}
+
+func refNull() RuntimeValue {
+    return refFunc(RuntimeValueRefNull)
 }
 
 func i32(value int32) RuntimeValue {
@@ -654,6 +691,13 @@ func Execute(stack *data.Stack[RuntimeValue], labels *data.Stack[int], expressio
             }
 
             binary.Write(NewByteWriter(memory[index.I32:]), binary.LittleEndian, value.F64)
+        case *core.RefFuncNullExpression:
+            stack.Push(refNull())
+        case *core.RefExternNullExpression:
+            stack.Push(refNull())
+        case *core.RefExternExpression:
+            value := current.(*core.RefExternExpression)
+            stack.Push(refExtern(value.Id))
         case *core.I32EqzExpression:
             value := stack.Pop()
             result := 0
@@ -1116,6 +1160,9 @@ func AssertReturn(module core.WebAssemblyModule, assert sexp.SExpression, store 
 
         if len(assert.Children) == 2 {
             expressions := core.MakeExpressions(module, nil, data.Stack[string]{}, assert.Children[1])
+            if len(expressions) == 0 {
+                return fmt.Errorf("Expected expression: %v", assert.Children[1])
+            }
             expected, err := EvaluateOne(expressions[0])
             if err != nil {
                 return err

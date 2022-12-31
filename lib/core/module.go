@@ -289,6 +289,7 @@ func (section *WebAssemblyElementSection) String() string {
 type TableType struct {
     Limit Limit
     RefType byte
+    Name string
 }
 
 func (table *TableType) String() string {
@@ -318,6 +319,16 @@ func ReadTableType(reader *ByteReader) (*TableType, error) {
 
 type WebAssemblyTableSection struct {
     Items []TableType
+}
+
+func (section *WebAssemblyTableSection) FindTableIndexByName(name string) (uint32, bool) {
+    for i, table := range section.Items {
+        if table.Name == name {
+            return uint32(i), true
+        }
+    }
+
+    return 0, false
 }
 
 func (section *WebAssemblyTableSection) AddTable(table TableType) uint32 {

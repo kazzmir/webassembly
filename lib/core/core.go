@@ -91,6 +91,8 @@ const (
     ValueTypeI64 ValueType = 0x7e
     ValueTypeF32 ValueType = 0x7d
     ValueTypeF64 ValueType = 0x7c
+    ValueTypeRefFunc ValueType = 0x80 // made up
+    ValueTypeRefExtern ValueType = 0x81 // made up
 )
 
 func (value *ValueType) ConvertToWat(indents string) string {
@@ -100,6 +102,8 @@ func (value *ValueType) ConvertToWat(indents string) string {
         case ValueTypeI64: return "i64"
         case ValueTypeF32: return "f32"
         case ValueTypeF64: return "f64"
+        case ValueTypeRefFunc: return "funcrec"
+        case ValueTypeRefExtern: return "externref"
         default: return "?"
     }
 }
@@ -110,6 +114,8 @@ func ValueTypeFromName(name string) ValueType {
         case "i64": return ValueTypeI64
         case "f32": return ValueTypeF32
         case "f64": return ValueTypeF64
+        case "funcref": return ValueTypeRefFunc
+        case "externref": return ValueTypeRefExtern
     }
 
     return InvalidValueType

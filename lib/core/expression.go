@@ -289,6 +289,28 @@ func (expr *F32NeExpression) ConvertToWat(labels data.Stack[int], indents string
     return fmt.Sprintf("f32.ne")
 }
 
+type RefFuncNullExpression struct {
+}
+
+func (expr *RefFuncNullExpression) ConvertToWat(labels data.Stack[int], indents string) string {
+    return fmt.Sprintf("ref.null func")
+}
+
+type RefExternNullExpression struct {
+}
+
+func (expr *RefExternNullExpression) ConvertToWat(labels data.Stack[int], indents string) string {
+    return fmt.Sprintf("ref.null externref")
+}
+
+type RefExternExpression struct {
+    Id uint32
+}
+
+func (expr *RefExternExpression) ConvertToWat(labels data.Stack[int], indents string) string {
+    return fmt.Sprintf(fmt.Sprintf("ref.extern %v", expr.Id))
+}
+
 type UnreachableExpression struct {
 }
 

@@ -239,7 +239,15 @@ func MakeExpressions(module WebAssemblyModule, code *Code, labels data.Stack[str
                     ExpectedType: expectedType,
                 })
         case "select":
-            return append(subexpressions(expr), &SelectExpression{})
+            var out []Expression
+            for _, child := range expr.Children {
+                if child.Name == "result" {
+                    // FIXME: handle this
+                    continue
+                }
+                out = append(out, MakeExpressions(module, code, labels, child)...)
+            }
+            return append(out, &SelectExpression{})
         case "br":
             var out []Expression
 
@@ -411,11 +419,17 @@ func MakeExpressions(module WebAssemblyModule, code *Code, labels data.Stack[str
 
             if expr.Children[0].Value != "" {
                 value, err := strconv.Atoi(expr.Children[0].Value)
-                if err != nil {
-                    return nil
+                if err == nil {
+                    tableId = value
+                } else {
+                    value, ok := module.GetTableSection().FindTableIndexByName(expr.Children[0].Value)
+                    if !ok {
+                        fmt.Printf("Error: could not find table '%v'\n", expr.Children[0].Value)
+                        return nil
+                    }
+                    tableId = int(value)
                 }
 
-                tableId = value
                 typeStart = 1
             }
 
@@ -470,6 +484,23 @@ func MakeExpressions(module WebAssemblyModule, code *Code, labels data.Stack[str
             return append(out, &CallExpression{Index: &FunctionIndex{uint32(index)}})
         case "unreachable":
             return append(subexpressions(expr), &UnreachableExpression{})
+        case "ref.null":
+            switch expr.Children[0].Value {
+                case "func": return []Expression{&RefFuncNullExpression{}}
+                case "externref": return []Expression{&RefExternNullExpression{}}
+            }
+
+            fmt.Printf("Error: invalid ref.null %v\n", expr.Children[0].Value)
+
+            return nil
+        case "ref.extern":
+            value, err := parseLiteralI32(expr.Children[0].Value)
+            if err != nil {
+                fmt.Printf("Error: could not parse ref.extern index: %v", err)
+                return nil
+            }
+
+            return []Expression{&RefExternExpression{Id: uint32(value)}}
         case "drop":
             return append(subexpressions(expr), &DropExpression{})
         case "i32.div_s":
@@ -921,32 +952,39 @@ func (wast *Wast) CreateWasmModule() (WebAssemblyModule, error) {
 
             case "table":
                 // so far this handles an inline table expression with funcref elements already given
-                reftype := expr.Children[0]
-                if reftype.Value == "funcref" {
-                    elements := expr.Children[1]
-                    if elements.Name == "elem" {
-                        tableId := tableSection.AddTable(TableType{
-                            Limit: Limit{
-                                Minimum: uint32(len(elements.Children)),
-                                Maximum: uint32(len(elements.Children)),
-                                HasMaximum: true,
-                            },
-                            RefType: RefTypeFunction,
-                        })
+                tableName := ""
+                for i := 0; i < len(expr.Children); i++ {
+                    if expr.Children[i].Value == "funcref" {
+                        elements := expr.Children[i+1]
+                        if elements.Name == "elem" {
+                            tableId := tableSection.AddTable(TableType{
+                                Limit: Limit{
+                                    Minimum: uint32(len(elements.Children)),
+                                    Maximum: uint32(len(elements.Children)),
+                                    HasMaximum: true,
+                                },
+                                RefType: RefTypeFunction,
+                                Name: tableName,
+                            })
 
-                        var functions []*FunctionIndex
-                        for _, element := range elements.Children {
-                            if element.Value != "" {
-                                functionIndex, ok := functionSection.GetFunctionIndexByName(element.Value)
-                                if ok {
-                                    functions = append(functions, &FunctionIndex{Id: uint32(functionIndex)})
-                                } else {
-                                    fmt.Printf("Warning: unable to find funcref '%v'\n", element.Value)
+                            var functions []*FunctionIndex
+                            for _, element := range elements.Children {
+                                if element.Value != "" {
+                                    functionIndex, ok := functionSection.GetFunctionIndexByName(element.Value)
+                                    if ok {
+                                        functions = append(functions, &FunctionIndex{Id: uint32(functionIndex)})
+                                    } else {
+                                        fmt.Printf("Warning: unable to find funcref '%v'\n", element.Value)
+                                    }
                                 }
                             }
+
+                            elementSection.AddFunctionRefInit(functions, int(tableId), []Expression{&I32ConstExpression{N: 0}})
                         }
 
-                        elementSection.AddFunctionRefInit(functions, int(tableId), []Expression{&I32ConstExpression{N: 0}})
+                        break
+                    } else {
+                        tableName = expr.Children[i].Value
                     }
                 }
 
