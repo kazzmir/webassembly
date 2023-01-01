@@ -894,6 +894,40 @@ func MakeExpressions(module WebAssemblyModule, code *Code, labels data.Stack[str
             return append(subexpressions(expr), &F64ConvertI32uExpression{})
         case "f64.convert_i32_s":
             return append(subexpressions(expr), &F64ConvertI32sExpression{})
+        case "f64.sub":
+            return append(subexpressions(expr), &F64SubExpression{})
+        case "f64.mul":
+            return append(subexpressions(expr), &F64MulExpression{})
+        case "f64.div":
+            return append(subexpressions(expr), &F64DivExpression{})
+        case "f64.copysign":
+            return append(subexpressions(expr), &F64CopySignExpression{})
+        case "f64.eq":
+            return append(subexpressions(expr), &F64EqExpression{})
+        case "f64.lt":
+            return append(subexpressions(expr), &F64LtExpression{})
+        case "f64.gt":
+            return append(subexpressions(expr), &F64GtExpression{})
+        case "f64.ge":
+            return append(subexpressions(expr), &F64GeExpression{})
+        case "f64.min":
+            return append(subexpressions(expr), &F64MinExpression{})
+        case "f64.max":
+            return append(subexpressions(expr), &F64MaxExpression{})
+        case "f32.mul":
+            return append(subexpressions(expr), &F32MulExpression{})
+        case "f32.copysign":
+            return append(subexpressions(expr), &F32CopySignExpression{})
+        case "f32.le":
+            return append(subexpressions(expr), &F32LeExpression{})
+        case "f32.ge":
+            return append(subexpressions(expr), &F32GeExpression{})
+        case "f32.min":
+            return append(subexpressions(expr), &F32MinExpression{})
+        case "f32.max":
+            return append(subexpressions(expr), &F32MaxExpression{})
+        case "f32.store":
+            return append(subexpressions(expr), &F32StoreExpression{})
         case "f32.sqrt":
             return append(subexpressions(expr), &F32SqrtExpression{})
         case "f32.eq":
@@ -1055,13 +1089,42 @@ func MakeExpressions(module WebAssemblyModule, code *Code, labels data.Stack[str
             // FIXME: handle memory argument alignment and offset
             return append(out, &I32LoadExpression{MemoryArgument{}})
         case "i32.load8_s":
-            var out []Expression
-            for _, child := range expr.Children {
-                out = append(out, MakeExpressions(module, code, labels, child)...)
-            }
-
             // FIXME: handle memory argument alignment and offset
-            return append(out, &I32Load8sExpression{MemoryArgument{}})
+            return append(subexpressions(expr), &I32Load8sExpression{MemoryArgument{}})
+        case "i32.load8_u":
+            return append(subexpressions(expr), &I32Load8uExpression{})
+        case "i64.div_s":
+            return append(subexpressions(expr), &I64DivsExpression{})
+        case "i64.div_u":
+            return append(subexpressions(expr), &I64DivuExpression{})
+        case "i64.rem_s":
+            return append(subexpressions(expr), &I64RemsExpression{})
+        case "i64.rem_u":
+            return append(subexpressions(expr), &I64RemuExpression{})
+        case "i64.and":
+            return append(subexpressions(expr), &I64AndExpression{})
+        case "i64.or":
+            return append(subexpressions(expr), &I64OrExpression{})
+        case "i64.xor":
+            return append(subexpressions(expr), &I64XOrExpression{})
+        case "i64.shl":
+            return append(subexpressions(expr), &I64ShlExpression{})
+        case "i64.shr_u":
+            return append(subexpressions(expr), &I64ShruExpression{})
+        case "i64.shr_s":
+            return append(subexpressions(expr), &I64ShrsExpression{})
+        case "i64.ne":
+            return append(subexpressions(expr), &I64NeExpression{})
+        case "i64.le_s":
+            return append(subexpressions(expr), &I64LesExpression{})
+        case "i64.ge_s":
+            return append(subexpressions(expr), &I64GesExpression{})
+        case "i64.ge_u":
+            return append(subexpressions(expr), &I64GeuExpression{})
+        case "i64.store8":
+            return append(subexpressions(expr), &I64Store8Expression{})
+        case "i64.store32":
+            return append(subexpressions(expr), &I64Store8Expression{})
         case "i64.load8_s":
             return append(subexpressions(expr), &I64Load8sExpression{MemoryArgument{}})
         case "f64.store":
@@ -1338,19 +1401,22 @@ func CreateWasmModule(module *sexp.SExpression) (WebAssemblyModule, error) {
                                     Name: tableName,
                                 })
 
-                                var functions []*FunctionIndex
-                                for _, element := range elements.Children {
-                                    if element.Value != "" {
-                                        functionIndex, ok := functionSection.GetFunctionIndexByName(element.Value)
-                                        if ok {
-                                            functions = append(functions, &FunctionIndex{Id: uint32(functionIndex)})
-                                        } else {
-                                            fmt.Printf("Warning: unable to find funcref '%v'\n", element.Value)
+                                /* initialize the elements after the module has been parsed */
+                                defer func(){
+                                    var functions []*FunctionIndex
+                                    for _, element := range elements.Children {
+                                        if element.Value != "" {
+                                            functionIndex, ok := functionSection.GetFunctionIndexByName(element.Value)
+                                            if ok {
+                                                functions = append(functions, &FunctionIndex{Id: uint32(functionIndex)})
+                                            } else {
+                                                fmt.Printf("Warning: unable to find funcref '%v'\n", element.Value)
+                                            }
                                         }
                                     }
-                                }
 
-                                elementSection.AddFunctionRefInit(functions, int(tableId), []Expression{&I32ConstExpression{N: 0}})
+                                    elementSection.AddFunctionRefInit(functions, int(tableId), []Expression{&I32ConstExpression{N: 0}})
+                                }()
                             }
                         }
 
