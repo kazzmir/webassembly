@@ -158,8 +158,13 @@ func ReadTypeVector(reader io.ByteReader) ([]ValueType, error) {
 
 const FunctionTypeMagic = 0x60
 
+type Parameter struct {
+    Name string
+    Type ValueType
+}
+
 type WebAssemblyFunction struct {
-    InputTypes []ValueType
+    InputTypes []Parameter
     OutputTypes []ValueType
 }
 
@@ -212,8 +217,13 @@ func (module *WebAssemblyFileModule) ReadFunctionType(reader io.Reader) (WebAsse
         log.Printf("Function %v -> %v\n", inputTypes, outputTypes)
     }
 
+    var parameters []Parameter
+    for _, input := range inputTypes {
+        parameters = append(parameters, Parameter{Type: input})
+    }
+
     return WebAssemblyFunction{
-        InputTypes: inputTypes,
+        InputTypes: parameters,
         OutputTypes: outputTypes,
     }, nil
 }

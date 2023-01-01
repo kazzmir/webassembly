@@ -55,9 +55,26 @@ func MakeFunctionType(function *sexp.SExpression) WebAssemblyFunction {
 
     // (func $name (param ...) (result ...) code ...)
     // param or result might not exist, but if they do exist they will appear in positions 1/2
-    for i := 1; i < min(3, len(function.Children)); i++ {
+    for i := 0; i < min(3, len(function.Children)); i++ {
+        if i == 0 && function.Children[i].Value != "" {
+            continue
+        }
         if function.Children[i].Name == "param" {
-            out.InputTypes = ConvertValueTypes(function.Children[i])
+            param := function.Children[i]
+            name := ""
+            for z := 0; z < len(param.Children); z++ {
+                if z == 0 && ValueTypeFromName(param.Children[i].Value) == InvalidValueType {
+                    name = param.Children[i].Value
+                    continue
+                }
+                if z > 0 {
+                    name = ""
+                }
+                out.InputTypes = append(out.InputTypes, Parameter{
+                    Type: ValueTypeFromName(param.Children[i].Value),
+                    Name: name,
+                })
+            }
         } else if function.Children[i].Name == "result" {
             out.OutputTypes = ConvertValueTypes(function.Children[i])
         }
@@ -1159,6 +1176,23 @@ func CreateWasmModule(module *sexp.SExpression) (WebAssemblyModule, error) {
                         functionName = child.Value
                     } else {
                         switch child.Name {
+                            case "type":
+                                if len(child.Children) > 0 {
+                                    if child.Children[0].Value != "" {
+                                        type_ := typeSection.GetTypeByName(child.Children[0].Value)
+                                        if type_ != nil {
+                                            functionType = typeSection.GetFunction(type_.Id)
+
+                                            for _, parameter := range functionType.InputTypes {
+                                                code.Locals = append(code.Locals, Local{
+                                                    Count: 1,
+                                                    Name: parameter.Name,
+                                                    Type: parameter.Type,
+                                                })
+                                            }
+                                        }
+                                    }
+                                }
                             case "export":
                                 exportedName = cleanName(child.Children[0].Value)
                             case "param":
@@ -1173,26 +1207,38 @@ func CreateWasmModule(module *sexp.SExpression) (WebAssemblyModule, error) {
                                             Name: paramName,
                                             Type: use,
                                         })
+
+                                        functionType.InputTypes = append(functionType.InputTypes, Parameter{
+                                            Name: paramName,
+                                            Type: use,
+                                        })
+
+                                        paramName = ""
                                     }
                                 }
-                                functionType.InputTypes = append(functionType.InputTypes, ConvertValueTypes(child)...)
+                                // functionType.InputTypes = append(functionType.InputTypes, ConvertValueTypes(child)...)
                             case "result":
                                 functionType.OutputTypes = ConvertValueTypes(child)
                             case "local":
-                                var localName string
-                                var localType string
-                                if len(child.Children) == 2 {
-                                    localName = child.Children[0].Value
-                                    localType = child.Children[1].Value
-                                } else {
-                                    localType = child.Children[0].Value
+                                if len(child.Children) > 0 {
+                                    var firstLocalName string
+                                    start := 0
+                                    if ValueTypeFromName(child.Children[0].Value) == InvalidValueType {
+                                        firstLocalName = child.Children[0].Value
+                                        start = 1
+                                    }
+                                    for i := start; i < len(child.Children); i++ {
+                                        name := ""
+                                        if i == start {
+                                            name = firstLocalName
+                                        }
+                                        code.Locals = append(code.Locals, Local{
+                                            Count: 1,
+                                            Name: name,
+                                            Type: ValueTypeFromName(child.Children[i].Value),
+                                        })
+                                    }
                                 }
-
-                                code.Locals = append(code.Locals, Local{
-                                    Count: 1,
-                                    Name: localName,
-                                    Type: ValueTypeFromName(localType),
-                                })
                             default:
                                 code.Expressions = append(code.Expressions, MakeExpressions(moduleOut, &code, data.Stack[string]{}, child)...)
                         }

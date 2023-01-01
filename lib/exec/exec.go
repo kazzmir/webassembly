@@ -987,8 +987,10 @@ func Execute(stack *data.Stack[RuntimeValue], labels *data.Stack[int], expressio
 
                     code := frame.Module.GetCodeSection().GetFunction(ref.Id)
 
-                    for _, local := range code.Locals {
-                        args = append(args, MakeRuntimeValue(local.Type))
+                    for i, local := range code.Locals {
+                        if i >= len(functionType.InputTypes) {
+                            args = append(args, MakeRuntimeValue(local.Type))
+                        }
                     }
 
                     out, err := RunCode(code, Frame{
@@ -1019,8 +1021,10 @@ func Execute(stack *data.Stack[RuntimeValue], labels *data.Stack[int], expressio
 
             code := frame.Module.GetCodeSection().GetFunction(expr.Index.Id)
 
-            for _, local := range code.Locals {
-                args = append(args, MakeRuntimeValue(local.Type))
+            for i, local := range code.Locals {
+                if i >= len(functionType.InputTypes) {
+                    args = append(args, MakeRuntimeValue(local.Type))
+                }
             }
 
             out, err := RunCode(code, Frame{
@@ -1110,8 +1114,10 @@ func Invoke(module core.WebAssemblyModule, store *Store, name string, args []Run
 
         type_ := module.GetTypeSection().GetFunction(functionTypeIndex.Id)
 
-        for _, local := range code.Locals {
-            args = append(args, MakeRuntimeValue(local.Type))
+        for i, local := range code.Locals {
+            if i >= len(type_.InputTypes) {
+                args = append(args, MakeRuntimeValue(local.Type))
+            }
         }
 
         frame := Frame{

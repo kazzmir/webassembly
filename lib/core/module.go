@@ -416,7 +416,7 @@ func (section *WebAssemblyCodeSection) ConvertToWat(module *WebAssemblyModule, i
                 out.WriteString(" (param")
                 for _, input := range function.InputTypes {
                     out.WriteByte(' ')
-                    out.WriteString(input.ConvertToWat(""))
+                    out.WriteString(input.Type.ConvertToWat(""))
                 }
                 out.WriteByte(')')
             }
@@ -735,7 +735,7 @@ func (section *WebAssemblyTypeSection) ConvertToWat(module *WebAssemblyModule, i
             out.WriteString(" (param")
             for _, input := range function.InputTypes {
                 out.WriteByte(' ')
-                out.WriteString(input.ConvertToWat(""))
+                out.WriteString(input.Type.ConvertToWat(""))
             }
             out.WriteByte(')')
         }
