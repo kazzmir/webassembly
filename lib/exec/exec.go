@@ -219,6 +219,9 @@ func (writer *ByteWriter) Write(data []byte) (int, error) {
     }
 }
 
+var True RuntimeValue = i32(1)
+var False RuntimeValue = i32(0)
+
 // magic value meaning we are returning from the function rather than just exiting a block
 const ReturnLabel int = 1<<30
 
@@ -364,33 +367,33 @@ func Execute(stack *data.Stack[RuntimeValue], labels *data.Stack[int], expressio
             a := stack.Pop()
             b := stack.Pop()
             if uint64(b.I64) <= uint64(a.I64) {
-                stack.Push(i32(1))
+                stack.Push(True)
             } else {
-                stack.Push(i32(0))
+                stack.Push(False)
             }
         case *core.I32LeuExpression:
             a := stack.Pop()
             b := stack.Pop()
             if uint32(b.I32) <= uint32(a.I32) {
-                stack.Push(i32(1))
+                stack.Push(True)
             } else {
-                stack.Push(i32(0))
+                stack.Push(False)
             }
         case *core.I32LesExpression:
             a := stack.Pop()
             b := stack.Pop()
             if b.I32 <= a.I32 {
-                stack.Push(i32(1))
+                stack.Push(True)
             } else {
-                stack.Push(i32(0))
+                stack.Push(False)
             }
         case *core.I32NeExpression:
             a := stack.Pop()
             b := stack.Pop()
             if b.I32 != a.I32 {
-                stack.Push(i32(1))
+                stack.Push(True)
             } else {
-                stack.Push(i32(0))
+                stack.Push(False)
             }
         case *core.I64ExtendI32uExpression:
             stack.Push(i64(int64(uint32(stack.Pop().I32))))
@@ -421,33 +424,33 @@ func Execute(stack *data.Stack[RuntimeValue], labels *data.Stack[int], expressio
             a := stack.Pop()
             b := stack.Pop()
             if b.F64 < a.F64 {
-                stack.Push(i32(1))
+                stack.Push(True)
             } else {
-                stack.Push(i32(0))
+                stack.Push(False)
             }
         case *core.F32EqExpression:
             a := stack.Pop()
             b := stack.Pop()
             if b.F32 == a.F32 {
-                stack.Push(i32(1))
+                stack.Push(True)
             } else {
-                stack.Push(i32(0))
+                stack.Push(False)
             }
         case *core.F64NeExpression:
             a := stack.Pop()
             b := stack.Pop()
             if b.F64 != a.F64 {
-                stack.Push(i32(1))
+                stack.Push(True)
             } else {
-                stack.Push(i32(0))
+                stack.Push(False)
             }
         case *core.F32NeExpression:
             a := stack.Pop()
             b := stack.Pop()
             if b.F32 != a.F32 {
-                stack.Push(i32(1))
+                stack.Push(True)
             } else {
-                stack.Push(i32(0))
+                stack.Push(False)
             }
         case *core.F32DivExpression:
             a := stack.Pop()
@@ -468,17 +471,17 @@ func Execute(stack *data.Stack[RuntimeValue], labels *data.Stack[int], expressio
             a := stack.Pop()
             b := stack.Pop()
             if b.F32 > a.F32 {
-                stack.Push(i32(1))
+                stack.Push(True)
             } else {
-                stack.Push(i32(0))
+                stack.Push(False)
             }
         case *core.F32LtExpression:
             a := stack.Pop()
             b := stack.Pop()
             if b.F32 < a.F32 {
-                stack.Push(i32(1))
+                stack.Push(True)
             } else {
-                stack.Push(i32(0))
+                stack.Push(False)
             }
         case *core.F32NegExpression:
             stack.Push(f32(-stack.Pop().F32))
@@ -505,33 +508,161 @@ func Execute(stack *data.Stack[RuntimeValue], labels *data.Stack[int], expressio
             a := stack.Pop()
             b := stack.Pop()
             if uint64(b.I64) < uint64(a.I64) {
-                stack.Push(i32(1))
+                stack.Push(True)
             } else {
-                stack.Push(i32(0))
+                stack.Push(False)
             }
         case *core.I32LtuExpression:
             a := stack.Pop()
             b := stack.Pop()
             if uint32(b.I32) < uint32(a.I32) {
-                stack.Push(i32(1))
+                stack.Push(True)
             } else {
-                stack.Push(i32(0))
+                stack.Push(False)
             }
         case *core.I32LtsExpression:
             a := stack.Pop()
             b := stack.Pop()
             if b.I32 < a.I32 {
-                stack.Push(i32(1))
+                stack.Push(True)
             } else {
-                stack.Push(i32(0))
+                stack.Push(False)
             }
         case *core.I32EqExpression:
             a := stack.Pop()
             b := stack.Pop()
             if b.I32 == a.I32 {
-                stack.Push(i32(1))
+                stack.Push(True)
             } else {
-                stack.Push(i32(0))
+                stack.Push(False)
+            }
+        case *core.F64GeExpression:
+            a := stack.Pop()
+            b := stack.Pop()
+            if b.F64 >= a.F64 {
+                stack.Push(True)
+            } else {
+                stack.Push(False)
+            }
+        case *core.F64GtExpression:
+            a := stack.Pop()
+            b := stack.Pop()
+            if b.F64 > a.F64 {
+                stack.Push(True)
+            } else {
+                stack.Push(False)
+            }
+        case *core.F32GeExpression:
+            a := stack.Pop()
+            b := stack.Pop()
+            if b.F32 >= a.F32 {
+                stack.Push(True)
+            } else {
+                stack.Push(False)
+            }
+        case *core.F32LeExpression:
+            a := stack.Pop()
+            b := stack.Pop()
+            if b.F32 <= a.F32 {
+                stack.Push(True)
+            } else {
+                stack.Push(False)
+            }
+        case *core.F64LtExpression:
+            a := stack.Pop()
+            b := stack.Pop()
+            if b.F64 < a.F64 {
+                stack.Push(True)
+            } else {
+                stack.Push(False)
+            }
+        case *core.F64MaxExpression:
+            a := stack.Pop()
+            b := stack.Pop()
+            if a.F64 > b.F64 {
+                stack.Push(a)
+            } else {
+                stack.Push(b)
+            }
+        case *core.F64EqExpression:
+            a := stack.Pop()
+            b := stack.Pop()
+            if a.F64 == b.F64 {
+                stack.Push(a)
+            } else {
+                stack.Push(b)
+            }
+        case *core.F64CopySignExpression:
+            a := stack.Pop()
+            b := stack.Pop()
+            if a.F64 < 0 {
+                if b.F64 < 0 {
+                    stack.Push(b)
+                } else {
+                    stack.Push(f64(-b.F64))
+                }
+            } else {
+                if b.F64 > 0 {
+                    stack.Push(b)
+                } else {
+                    stack.Push(f64(-b.F64))
+                }
+            }
+        case *core.F32CopySignExpression:
+            a := stack.Pop()
+            b := stack.Pop()
+            if a.F32 < 0 {
+                if b.F32 < 0 {
+                    stack.Push(b)
+                } else {
+                    stack.Push(f32(-b.F32))
+                }
+            } else {
+                if b.F32 > 0 {
+                    stack.Push(b)
+                } else {
+                    stack.Push(f32(-b.F32))
+                }
+            }
+        case *core.F64DivExpression:
+            a := stack.Pop()
+            b := stack.Pop()
+            stack.Push(f64(b.F64 / a.F64))
+        case *core.F64MulExpression:
+            a := stack.Pop()
+            b := stack.Pop()
+            stack.Push(f64(b.F64 * a.F64))
+        case *core.F32MulExpression:
+            a := stack.Pop()
+            b := stack.Pop()
+            stack.Push(f32(b.F32 * a.F32))
+        case *core.F64SubExpression:
+            a := stack.Pop()
+            b := stack.Pop()
+            stack.Push(f64(b.F64 - a.F64))
+        case *core.F64MinExpression:
+            a := stack.Pop()
+            b := stack.Pop()
+            if a.F64 < b.F64 {
+                stack.Push(a)
+            } else {
+                stack.Push(b)
+            }
+        case *core.F32MinExpression:
+            a := stack.Pop()
+            b := stack.Pop()
+            if a.F32 < b.F32 {
+                stack.Push(a)
+            } else {
+                stack.Push(b)
+            }
+        case *core.F32MaxExpression:
+            a := stack.Pop()
+            b := stack.Pop()
+            if a.F32 > b.F32 {
+                stack.Push(a)
+            } else {
+                stack.Push(b)
             }
         case *core.MemoryGrowExpression:
             if len(store.Memory) == 0 {
@@ -588,7 +719,7 @@ func Execute(stack *data.Stack[RuntimeValue], labels *data.Stack[int], expressio
 
         case *core.I32Load8sExpression:
             if len(store.Memory) == 0 {
-                return 0, 0, fmt.Errorf("no memory available for i64.load8_s")
+                return 0, 0, fmt.Errorf("no memory available for i32.load8_s")
             }
 
             memory := store.Memory[0]
@@ -600,6 +731,20 @@ func Execute(stack *data.Stack[RuntimeValue], labels *data.Stack[int], expressio
             }
 
             stack.Push(i32(int32(memory[index.I32])))
+        case *core.I32Load8uExpression:
+            if len(store.Memory) == 0 {
+                return 0, 0, fmt.Errorf("no memory available for i32.load8_u")
+            }
+
+            memory := store.Memory[0]
+
+            index := stack.Pop()
+
+            if int(index.I32) >= len(memory) {
+                return 0, 0, Trap(fmt.Sprintf("invalid memory index %v", index.I32))
+            }
+
+            stack.Push(i32(int32(uint32(memory[index.I32]))))
         case *core.I64Load8sExpression:
             if len(store.Memory) == 0 {
                 return 0, 0, fmt.Errorf("no memory available for i64.load8_s")
@@ -629,6 +774,21 @@ func Execute(stack *data.Stack[RuntimeValue], labels *data.Stack[int], expressio
             }
 
             binary.LittleEndian.PutUint32(memory[index.I32:], uint32(value.I32))
+        case *core.I64Store8Expression:
+            value := stack.Pop()
+            index := stack.Pop()
+
+            if len(store.Memory) == 0 {
+                return 0, 0, fmt.Errorf("no memory available for i32.store")
+            }
+
+            memory := store.Memory[0]
+
+            if int(index.I32) >= len(memory) {
+                return 0, 0, fmt.Errorf("invalid memory location: %v", index)
+            }
+
+            binary.LittleEndian.PutUint64(memory[index.I32:], uint64(int8(value.I64)))
         case *core.I32Store16Expression:
             value := stack.Pop()
             index := stack.Pop()
@@ -704,6 +864,57 @@ func Execute(stack *data.Stack[RuntimeValue], labels *data.Stack[int], expressio
             }
 
             binary.Write(NewByteWriter(memory[index.I32:]), binary.LittleEndian, value.F64)
+        case *core.F32StoreExpression:
+            value := stack.Pop()
+            index := stack.Pop()
+
+            if len(store.Memory) == 0 {
+                return 0, 0, fmt.Errorf("no memory available for i32.store")
+            }
+
+            memory := store.Memory[0]
+
+            if int(index.I32) >= len(memory) {
+                return 0, 0, fmt.Errorf("invalid memory location: %v", index)
+            }
+
+            binary.Write(NewByteWriter(memory[index.I32:]), binary.LittleEndian, value.F32)
+        case *core.I64GeuExpression:
+            a := stack.Pop()
+            b := stack.Pop()
+            if uint64(b.I64) >= uint64(a.I64) {
+                stack.Push(True)
+            } else {
+                stack.Push(False)
+            }
+        case *core.I64GesExpression:
+            a := stack.Pop()
+            b := stack.Pop()
+            if b.I64 >= a.I64 {
+                stack.Push(True)
+            } else {
+                stack.Push(False)
+            }
+        case *core.I64LesExpression:
+            a := stack.Pop()
+            b := stack.Pop()
+            if b.I64 <= a.I64 {
+                stack.Push(True)
+            } else {
+                stack.Push(False)
+            }
+        case *core.I64NeExpression:
+            a := stack.Pop()
+            b := stack.Pop()
+            if b.I64 != a.I64 {
+                stack.Push(True)
+            } else {
+                stack.Push(False)
+            }
+        case *core.I64DivuExpression:
+            a := stack.Pop()
+            b := stack.Pop()
+            stack.Push(i64(int64(uint64(b.I64) / uint64(a.I64))))
         case *core.RefFuncNullExpression:
             stack.Push(refNull())
         case *core.RefExternNullExpression:
@@ -728,6 +939,10 @@ func Execute(stack *data.Stack[RuntimeValue], labels *data.Stack[int], expressio
 
             stack.Push(i32(int32(result)))
 
+        case *core.I64DivsExpression:
+            a := stack.Pop()
+            b := stack.Pop()
+            stack.Push(i64(b.I64 / a.I64))
         case *core.I32DivsExpression:
             a := stack.Pop()
             b := stack.Pop()
@@ -744,6 +959,14 @@ func Execute(stack *data.Stack[RuntimeValue], labels *data.Stack[int], expressio
             stack.Push(i32(int32(bits.LeadingZeros32(uint32(value.I32)))))
         case *core.I32PopcntExpression:
             stack.Push(i32(int32(bits.OnesCount32(uint32(stack.Pop().I32)))))
+        case *core.I64RemsExpression:
+            a := stack.Pop()
+            b := stack.Pop()
+            stack.Push(i64(b.I64 % a.I64))
+        case *core.I64RemuExpression:
+            a := stack.Pop()
+            b := stack.Pop()
+            stack.Push(i64(int64(uint64(b.I64) % uint64(a.I64))))
         case *core.I32RemsExpression:
             a := stack.Pop()
             b := stack.Pop()
@@ -752,6 +975,18 @@ func Execute(stack *data.Stack[RuntimeValue], labels *data.Stack[int], expressio
             a := stack.Pop()
             b := stack.Pop()
             stack.Push(i32(int32(uint32(b.I32) % uint32(a.I32))))
+        case *core.I64AndExpression:
+            arg1 := stack.Pop()
+            arg2 := stack.Pop()
+            stack.Push(i64(arg1.I64 & arg2.I64))
+        case *core.I64OrExpression:
+            arg1 := stack.Pop()
+            arg2 := stack.Pop()
+            stack.Push(i64(arg1.I64 | arg2.I64))
+        case *core.I64XOrExpression:
+            arg1 := stack.Pop()
+            arg2 := stack.Pop()
+            stack.Push(i64(arg1.I64 ^ arg2.I64))
         case *core.I32AndExpression:
             arg1 := stack.Pop()
             arg2 := stack.Pop()
@@ -764,6 +999,10 @@ func Execute(stack *data.Stack[RuntimeValue], labels *data.Stack[int], expressio
             arg1 := stack.Pop()
             arg2 := stack.Pop()
             stack.Push(i32(arg1.I32 ^ arg2.I32))
+        case *core.I64ShlExpression:
+            arg1 := stack.Pop()
+            arg2 := stack.Pop()
+            stack.Push(i64(arg2.I64 << (uint32(arg1.I64) % 64)))
         case *core.I32ShlExpression:
             arg1 := stack.Pop()
             arg2 := stack.Pop()
@@ -780,6 +1019,14 @@ func Execute(stack *data.Stack[RuntimeValue], labels *data.Stack[int], expressio
             arg1 := stack.Pop()
             arg2 := stack.Pop()
             stack.Push(i32(arg2.I32 >> (uint32(arg1.I32) % 32)))
+        case *core.I64ShrsExpression:
+            arg1 := stack.Pop()
+            arg2 := stack.Pop()
+            stack.Push(i64(arg2.I64 >> (uint64(arg1.I64) % 64)))
+        case *core.I64ShruExpression:
+            arg1 := stack.Pop()
+            arg2 := stack.Pop()
+            stack.Push(i64(int64(uint64(arg2.I64) >> (uint64(arg1.I64) % 64))))
         case *core.I32ShruExpression:
             arg1 := stack.Pop()
             arg2 := stack.Pop()
@@ -875,9 +1122,9 @@ func Execute(stack *data.Stack[RuntimeValue], labels *data.Stack[int], expressio
             arg1 := stack.Pop()
             arg2 := stack.Pop()
             if arg1.I64 == arg2.I64 {
-                stack.Push(i32(1))
+                stack.Push(True)
             } else {
-                stack.Push(i32(0))
+                stack.Push(False)
             }
         case *core.DropExpression:
             stack.Pop()
