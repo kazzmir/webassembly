@@ -55,7 +55,7 @@ func MakeFunctionType(function *sexp.SExpression) WebAssemblyFunction {
 
     // (func $name (param ...) (result ...) code ...)
     // param or result might not exist, but if they do exist they will appear in positions 1/2
-    for i := 0; i < min(3, len(function.Children)); i++ {
+    for i := 0; i < len(function.Children); i++ {
         if i == 0 && function.Children[i].Value != "" {
             continue
         }
@@ -523,7 +523,26 @@ func MakeExpressions(module WebAssemblyModule, code *Code, labels data.Stack[str
             labels.Push("") // unnamed label for if
             defer labels.Pop()
 
-            for _, child := range expr.Children {
+            for i, child := range expr.Children {
+                if i == 0 && child.Value != "" {
+                    labels.Push(child.Value)
+                    defer labels.Pop()
+                    continue
+                }
+
+                if child.Name == "param" {
+                    // FIXME:
+                    continue
+                }
+                if child.Name == "type" {
+                    name := child.Children[0].Value
+                    index := module.GetTypeSection().GetTypeByName(name)
+                    if index != nil {
+                        functionType := module.GetTypeSection().GetFunction(index.Id)
+                        expectedType = functionType.OutputTypes
+                    }
+                    continue
+                }
                 if child.Name == "result" {
                     for _, result := range child.Children {
                         expectedType = append(expectedType, ValueTypeFromName(result.Value))
@@ -680,14 +699,24 @@ func MakeExpressions(module WebAssemblyModule, code *Code, labels data.Stack[str
             }
             return append(out, &I64AddExpression{})
         case "i64.const":
-            value, err := strconv.ParseInt(expr.Children[0].Value, 0, 64)
-            if err != nil {
-                return nil
+            data := strings.ReplaceAll(expr.Children[0].Value, "_", "")
+            var use int64
+            value, err := strconv.ParseUint(data, 0, 64)
+            if err == nil {
+                use = int64(value)
+            } else {
+                value, err := strconv.ParseInt(data, 0, 64)
+                if err == nil {
+                    use = value
+                } else {
+                    fmt.Printf("Error: could not parse int64 constant: %v\n", err)
+                    return nil
+                }
             }
 
             return []Expression{
                 &I64ConstExpression{
-                    N: value,
+                    N: use,
                 },
             }
 
@@ -815,6 +844,10 @@ func MakeExpressions(module WebAssemblyModule, code *Code, labels data.Stack[str
             return []Expression{&RefExternExpression{Id: uint32(value)}}
         case "drop":
             return append(subexpressions(expr), &DropExpression{})
+        case "i64.extend_i32_u":
+            return append(subexpressions(expr), &I64ExtendI32uExpression{})
+        case "i64.lt_u":
+            return append(subexpressions(expr), &I64LtuExpression{})
         case "i32.div_s":
             return append(subexpressions(expr), &I32DivsExpression{})
         case "i32.div_u":
@@ -1064,7 +1097,7 @@ func MakeExpressions(module WebAssemblyModule, code *Code, labels data.Stack[str
 
     }
 
-    fmt.Printf("Warning: unhandled wast expression '%v'\n", expr.Name)
+    fmt.Printf("Warning: unhandled wast expression '%v'\n", expr)
 
     return nil
 }

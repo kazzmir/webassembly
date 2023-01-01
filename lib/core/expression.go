@@ -453,6 +453,20 @@ func (expr *I32SubExpression) ConvertToWat(labels data.Stack[int], indents strin
     return "i32.sub"
 }
 
+type I64ExtendI32uExpression struct {
+}
+
+func (expr *I64ExtendI32uExpression) ConvertToWat(labels data.Stack[int], indents string) string {
+    return "i64.extend_i32_u"
+}
+
+type I64LtuExpression struct {
+}
+
+func (expr *I64LtuExpression) ConvertToWat(labels data.Stack[int], indents string) string {
+    return "i64.lt_u"
+}
+
 /* FIXME: generalize these load expression types */
 type I32Load8sExpression struct {
     Memory MemoryArgument

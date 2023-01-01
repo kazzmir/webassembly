@@ -301,6 +301,9 @@ func Execute(stack *data.Stack[RuntimeValue], labels *data.Stack[int], expressio
 
                     // fmt.Printf("Branch to %v\n", branch)
                     if branch == 1 {
+                        if len(block.ExpectedType) > stack.Size() {
+                            return 0, 0, fmt.Errorf("not enough values on the stack to return from the block")
+                        }
                         /* we are jumping back to some block that only cares about the last N values on the stack, so pop all values
                          * between whatever was on the stack when the block was entered and what is there now
                          */
@@ -389,6 +392,8 @@ func Execute(stack *data.Stack[RuntimeValue], labels *data.Stack[int], expressio
             } else {
                 stack.Push(i32(0))
             }
+        case *core.I64ExtendI32uExpression:
+            stack.Push(i64(int64(uint32(stack.Pop().I32))))
         case *core.I32Extend8sExpression:
             stack.Push(i32(int32(int8(stack.Pop().I32))))
         case *core.I32Extend16sExpression:
@@ -496,6 +501,14 @@ func Execute(stack *data.Stack[RuntimeValue], labels *data.Stack[int], expressio
             /* FIXME: not sure about this one */
             value := stack.Pop()
             stack.Push(i32(int32(value.I64 % int64(math.MaxInt32))))
+        case *core.I64LtuExpression:
+            a := stack.Pop()
+            b := stack.Pop()
+            if uint32(b.I64) < uint32(a.I64) {
+                stack.Push(i32(1))
+            } else {
+                stack.Push(i32(0))
+            }
         case *core.I32LtuExpression:
             a := stack.Pop()
             b := stack.Pop()
@@ -883,8 +896,10 @@ func Execute(stack *data.Stack[RuntimeValue], labels *data.Stack[int], expressio
                 return 0, 0, fmt.Errorf("br_table had no labels")
             }
 
-            if value.I32 >= 0 && int(value.I32) < len(expr.Labels) {
-                return 0, int(expr.Labels[value.I32])+1, nil
+            index := uint32(value.I32)
+
+            if int(index) < len(expr.Labels) {
+                return 0, int(expr.Labels[index])+1, nil
             }
 
             return 0, int(expr.Labels[len(expr.Labels)-1])+1, nil
@@ -1079,6 +1094,9 @@ func RunCode(code core.Code, frame Frame, functionType core.WebAssemblyFunction,
             return nil, err
         }
         if branch == ReturnLabel {
+            if stack.Size() < len(functionType.OutputTypes) {
+                return nil, Trap("not enough values on the stack")
+            }
             // FIXME: return the number of values as declared by the function (result ...)
             return stack.PopN(len(functionType.OutputTypes)), nil
         }
