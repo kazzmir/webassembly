@@ -504,7 +504,7 @@ func Execute(stack *data.Stack[RuntimeValue], labels *data.Stack[int], expressio
         case *core.I64LtuExpression:
             a := stack.Pop()
             b := stack.Pop()
-            if uint32(b.I64) < uint32(a.I64) {
+            if uint64(b.I64) < uint64(a.I64) {
                 stack.Push(i32(1))
             } else {
                 stack.Push(i32(0))
