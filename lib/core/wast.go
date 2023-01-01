@@ -78,6 +78,14 @@ func parseLiteralI32(data string) (int32, error) {
         return int32(m), nil
     }
 
+    // handle 0_123_456_789
+    // remove _ and leading 0
+    normalized := strings.TrimLeft(strings.ReplaceAll(data, "_", ""), "0")
+    m, err = strconv.ParseUint(normalized, 0, 32)
+    if err == nil {
+        return int32(m), nil
+    }
+
     return 0, err
 }
 
@@ -95,6 +103,18 @@ func parseFloat64(data string) (float64, error) {
     /* FIXME: handle NaN payload */
     if strings.HasPrefix(data, "-nan") || strings.HasPrefix(data, "nan") {
         return math.NaN(), nil
+    }
+
+    if strings.Contains(data, "."){
+        parts := strings.Split(data, ".")
+        if len(parts) == 2 {
+            left, err := strconv.ParseInt(parts[0], 0, 64)
+            if err == nil {
+                if parts[1] == "" {
+                    return float64(left), nil
+                }
+            }
+        }
     }
 
     hexfloatRegexp := regexp.MustCompile("(0x[0-9a-zA-Z]*)p([-+])([0-9])")
@@ -153,6 +173,13 @@ func MakeExpressions(module WebAssemblyModule, code *Code, labels data.Stack[str
         }
 
         return label, nil
+    }
+
+    if expr.Value != "" {
+        /* handle flat syntax */
+        switch expr.Value {
+            case "drop":  return []Expression{&DropExpression{}}
+        }
     }
 
     switch expr.Name {
