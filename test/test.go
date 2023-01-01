@@ -81,14 +81,19 @@ func runWasmToWatTests(){
     }
 }
 
-func runWastFile(path string) error {
+func runWastFile(path string) (int, int, error) {
     wast, err := core.ParseWastFile(path)
     if err != nil {
-        return err
+        return 0, 0, err
     }
 
     var module core.WebAssemblyModule
     var store *exec.Store
+
+    var fail error
+
+    pass := 0
+    total := 0
 
     for _, command := range wast.Expressions {
         switch command.Name {
@@ -96,22 +101,28 @@ func runWastFile(path string) error {
                 var err error
                 module, err = core.CreateWasmModule(&command)
                 if err != nil {
-                    return err
+                    return 0, 0, err
                 }
                 store = exec.InitializeStore(module)
             case "assert_return":
+                total += 1
+
                 if store == nil {
-                    return fmt.Errorf("Error: no module defined")
+                    fail = fmt.Errorf("Error: no module defined")
+                    break
                 }
 
                 err := exec.AssertReturn(module, command, store)
                 if err != nil {
-                    return err
+                    fail = err
+                    fmt.Printf("Error: %v\n", err)
+                } else {
+                    pass += 1
                 }
         }
     }
 
-    return nil
+    return pass, total, fail
 }
 
 func runWastExecTests(){
@@ -127,11 +138,11 @@ func runWastExecTests(){
         if !path.IsDir() && strings.HasSuffix(name, ".wast"){
             fullPath := filepath.Join("test-files/wast", name)
 
-            err := runWastFile(fullPath)
+            pass, total, err := runWastFile(fullPath)
             if err != nil {
-                fmt.Printf("Failure: %v: %v\n", name, err)
+                fmt.Printf("Failure: %v (%v/%v): %v\n", name, pass, total, err)
             } else {
-                fmt.Printf("Success: %v\n", name)
+                fmt.Printf("Success: %v (%v/%v)\n", name, pass, total)
             }
         }
     }

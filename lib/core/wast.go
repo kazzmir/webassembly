@@ -9,7 +9,7 @@ import (
     "math"
     "strconv"
     "strings"
-    "regexp"
+    // "regexp"
     "github.com/kazzmir/webassembly/lib/sexp"
     "github.com/kazzmir/webassembly/lib/data"
 )
@@ -89,60 +89,330 @@ func parseLiteralI32(data string) (int32, error) {
     return 0, err
 }
 
+func parseNum(reader *strings.Reader) (int64, error) {
+    var out int64
+
+    for {
+        digit, err := reader.ReadByte()
+        if err != nil {
+            return out, nil
+        }
+
+        value, err := strconv.ParseInt(string(digit), 0, 64)
+        if err != nil {
+            reader.UnreadByte()
+            return out, nil
+        }
+
+        out = out * 10 + value
+    }
+
+    return out, nil
+}
+
+func parseHexFloat(reader *strings.Reader) (float64, error) {
+    var out float64
+
+    for {
+        digit, err := reader.ReadByte()
+        if err != nil {
+            return out, nil
+        }
+
+        value, err := strconv.ParseInt("0x" + string(digit), 0, 64)
+        if err != nil {
+            reader.UnreadByte()
+            return out, nil
+        }
+
+        out = out * 16 + float64(value)
+    }
+
+    return out, nil
+}
+
+func parseHexFrac(reader *strings.Reader) (float64, error) {
+    digit, err := reader.ReadByte()
+    if err != nil {
+        return 0, err
+    }
+
+    value, err := strconv.ParseInt("0x" + string(digit), 0, 64)
+    if err != nil {
+        reader.UnreadByte()
+        return 0, err
+    }
+
+    rest, err := parseHexFrac(reader)
+    if err != nil {
+        return float64(value) / 16, nil
+    } else {
+        return (float64(value) + rest/16) / 16, nil
+    }
+}
+
+func parseRawFloat(reader *strings.Reader) (float64, error) {
+    var out float64
+
+    for {
+        digit, err := reader.ReadByte()
+        if err != nil {
+            return out, nil
+        }
+
+        value, err := strconv.ParseInt(string(digit), 0, 64)
+        if err != nil {
+            reader.UnreadByte()
+            return out, nil
+        }
+
+        out = out * 10 + float64(value)
+    }
+
+    return out, nil
+}
+
+/* parse a base-10 float */
+    /*
+func parseRawFloat(data string) (float64, error) {
+    if strings.HasPrefix(data, "0x") {
+        value, err = parseRawHexFloat(data)
+        if err == nil {
+            return value, nil
+        }
+    }
+
+    var out float64
+
+    for _, digit := range data {
+        value, err := strconv.ParseInt(string(digit), 0, 64)
+        if err != nil {
+            return 0, err
+        }
+
+        out = out * 10 + float64(value)
+    }
+
+    return out, nil
+
+    return 0, nil
+}
+    */
+
+/* 0x <hexnum> .? */
+func parseFloat64_1(reader *strings.Reader) (float64, error) {
+    p, err := parseHexFloat(reader)
+    if err != nil {
+        return 0, err
+    }
+
+    if reader.Len() == 0 {
+        return p, nil
+    }
+
+    next, err := reader.ReadByte()
+    if err != nil {
+        return 0, err
+    }
+
+    if next != '.' {
+        return 0, fmt.Errorf("expected .")
+    }
+
+    if reader.Len() != 0 {
+        return 0, fmt.Errorf("fail")
+    }
+
+    return p, nil
+}
+
+/* 0x <hexnum> . <hexfrac> */
+func parseFloat64_2(reader *strings.Reader) (float64, error) {
+    p, err := parseHexFloat(reader)
+    if err != nil {
+        return 0, err
+    }
+
+    next, err := reader.ReadByte()
+    if err != nil {
+        return 0, err
+    }
+
+    if next != '.' {
+        return 0, fmt.Errorf("expected .")
+    }
+
+    q, err := parseHexFrac(reader)
+    if err != nil {
+        return 0, err
+    }
+
+    if reader.Len() != 0 {
+        return 0, fmt.Errorf("fail")
+    }
+
+    return p+q, nil
+}
+
+/* 0x <hexnum> . p +- <num> */
+func parseFloat64_3(reader *strings.Reader) (float64, error) {
+    p, err := parseHexFloat(reader)
+    if err != nil {
+        return 0, err
+    }
+
+    next, err := reader.ReadByte()
+    if err != nil {
+        return 0, err
+    }
+
+    if next != '.' {
+        reader.UnreadByte()
+    }
+
+    pChar, err := reader.ReadByte()
+    if err != nil {
+        return 0, err
+    }
+
+    if strings.ToLower(string(pChar)) != "p" {
+        return 0, err
+    }
+
+    sign := 1
+    next, err = reader.ReadByte()
+    if err != nil {
+        return 0, fmt.Errorf("fail")
+    }
+
+    if next == '-' {
+        sign = -1
+    } else if next == '+' {
+        sign = 1
+    } else {
+        reader.UnreadByte()
+    }
+
+    e, err := parseNum(reader)
+    if err != nil {
+        return 0, err
+    }
+
+    if reader.Len() != 0 {
+        return 0, fmt.Errorf("fail")
+    }
+
+    return p * math.Pow(2, float64(e) * float64(sign)), nil
+}
+
+/* 0x <hexnum> . <hexfrac> p +- <num> */
+func parseFloat64_4(reader *strings.Reader) (float64, error) {
+    p, err := parseHexFloat(reader)
+    if err != nil {
+        return 0, err
+    }
+
+    next, err := reader.ReadByte()
+    if err != nil {
+        return 0, err
+    }
+
+    if next != '.' {
+        return 0, fmt.Errorf("expected .")
+    }
+
+    q, err := parseHexFrac(reader)
+    if err != nil {
+        return 0, err
+    }
+
+    pChar, err := reader.ReadByte()
+    if err != nil {
+        return 0, err
+    }
+
+    if strings.ToLower(string(pChar)) != "p" {
+        return 0, err
+    }
+
+    sign := 1
+    next, err = reader.ReadByte()
+    if err != nil {
+        return 0, fmt.Errorf("fail")
+    }
+
+    if next == '-' {
+        sign = -1
+    } else if next == '+' {
+        sign = 1
+    } else {
+        reader.UnreadByte()
+    }
+
+    e, err := parseNum(reader)
+    if err != nil {
+        return 0, err
+    }
+
+    if reader.Len() != 0 {
+        return 0, fmt.Errorf("fail")
+    }
+
+    return (p+q) * math.Pow(2, float64(e) * float64(sign)), nil
+}
+
 func parseFloat64(data string) (float64, error) {
-    value, err := strconv.ParseFloat(data, 64)
-    if err == nil {
-        return value, nil
+
+    var sign float64 = 1
+    if len(data) > 0 {
+        if data[0] == '-' {
+            sign = -1
+            data = data[1:]
+        } else if data[0] == '+' {
+            sign = 1
+            data = data[1:]
+        }
     }
 
-    value2, err := strconv.ParseInt(data, 0, 64)
-    if err == nil {
-        return float64(value2), nil
-    }
-
-    /* FIXME: handle NaN payload */
-    if strings.HasPrefix(data, "-nan") || strings.HasPrefix(data, "nan") {
+    if strings.HasPrefix(data, "nan") {
+        // FIXME: handle payload
         return math.NaN(), nil
     }
 
-    if strings.Contains(data, "."){
-        parts := strings.Split(data, ".")
-        if len(parts) == 2 {
-            left, err := strconv.ParseInt(parts[0], 0, 64)
-            if err == nil {
-                if parts[1] == "" {
-                    return float64(left), nil
-                }
-            }
-        }
+    normalized := strings.ReplaceAll(data, "_", "")
+
+    /* give the native go parser a whack at it */
+    check, err := strconv.ParseFloat(normalized, 64)
+    if err == nil {
+        return check*sign, nil
     }
 
-    hexfloatRegexp := regexp.MustCompile("(0x[0-9a-zA-Z]*)p([-+])([0-9])")
-    matches := hexfloatRegexp.FindSubmatch([]byte(data))
-    if matches != nil {
-        p := string(matches[1])
-        sign := string(matches[2])
-        exp := string(matches[3])
-
-        pValue, err := strconv.ParseInt(p, 0, 64)
-        if err != nil {
-            return 0, err
+    if strings.HasPrefix(normalized, "0x") {
+        left, err := parseFloat64_1(strings.NewReader(normalized[2:]))
+        if err == nil {
+            return sign*left, nil
         }
 
-        expValue, err := strconv.ParseInt(exp, 0, 64)
-        if err != nil {
-            return 0, err
+        left, err = parseFloat64_2(strings.NewReader(normalized[2:]))
+        if err == nil {
+            return sign*left, nil
         }
 
-        if sign == "-" {
-            expValue = -expValue
+        left, err = parseFloat64_3(strings.NewReader(normalized[2:]))
+        if err == nil {
+            return sign*left, nil
         }
 
-        out := float64(pValue) *  math.Pow(2, float64(expValue))
-        return out, nil
+        left, err = parseFloat64_4(strings.NewReader(normalized[2:]))
+        if err == nil {
+            return sign*left, nil
+        }
+
+        return 0, fmt.Errorf("could not read float")
+    } else {
+        value, err := strconv.ParseFloat(normalized, 64)
+        return sign*value, err
     }
-
-    return 0, fmt.Errorf("unable to parse float")
 }
 
 func parseFloat32(data string) (float32, error) {
