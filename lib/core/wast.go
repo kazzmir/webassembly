@@ -1272,10 +1272,19 @@ func CreateWasmModule(module *sexp.SExpression) (WebAssemblyModule, error) {
                         functionName = child.Value
                     } else {
                         switch child.Name {
+                            case "import":
+                                /* FIXME */
                             case "type":
                                 if len(child.Children) > 0 {
                                     if child.Children[0].Value != "" {
-                                        type_ := typeSection.GetTypeByName(child.Children[0].Value)
+                                        var type_ *TypeIndex
+                                        index, err := strconv.Atoi(child.Children[0].Value)
+                                        if err == nil {
+                                            type_ = &TypeIndex{Id: uint32(index)}
+                                        } else {
+                                            type_ = typeSection.GetTypeByName(child.Children[0].Value)
+                                        }
+
                                         if type_ != nil {
                                             functionType = typeSection.GetFunction(type_.Id)
 
@@ -1351,11 +1360,18 @@ func CreateWasmModule(module *sexp.SExpression) (WebAssemblyModule, error) {
                     exportSection.AddExport(exportedName, &FunctionIndex{Id: functionIndex})
                 }
             case "type":
-                name := expr.Children[0]
-                kind := expr.Children[1]
-                if kind.Name == "func" {
-                    typeIndex := typeSection.GetOrCreateFunctionType(MakeFunctionType(kind))
-                    typeSection.AssociateName(name.Value, &TypeIndex{Id: typeIndex})
+                var name string
+                for i, child := range expr.Children {
+                    if i == 0 && child.Value != "" {
+                        name = child.Value
+                        continue
+                    }
+                    if child.Name == "func" {
+                        typeIndex := typeSection.GetOrCreateFunctionType(MakeFunctionType(child))
+                        if name != "" {
+                            typeSection.AssociateName(name, &TypeIndex{Id: typeIndex})
+                        }
+                    }
                 }
             case "global":
                 name := expr.Children[0]
@@ -1406,11 +1422,16 @@ func CreateWasmModule(module *sexp.SExpression) (WebAssemblyModule, error) {
                                     var functions []*FunctionIndex
                                     for _, element := range elements.Children {
                                         if element.Value != "" {
-                                            functionIndex, ok := functionSection.GetFunctionIndexByName(element.Value)
-                                            if ok {
-                                                functions = append(functions, &FunctionIndex{Id: uint32(functionIndex)})
+                                            index, err := strconv.Atoi(element.Value)
+                                            if err == nil {
+                                                functions = append(functions, &FunctionIndex{Id: uint32(index)})
                                             } else {
-                                                fmt.Printf("Warning: unable to find funcref '%v'\n", element.Value)
+                                                functionIndex, ok := functionSection.GetFunctionIndexByName(element.Value)
+                                                if ok {
+                                                    functions = append(functions, &FunctionIndex{Id: uint32(functionIndex)})
+                                                } else {
+                                                    fmt.Printf("Warning: unable to find funcref '%v'\n", element.Value)
+                                                }
                                             }
                                         }
                                     }

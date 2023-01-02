@@ -713,11 +713,13 @@ func (section *WebAssemblyTypeSection) GetTypeByName(name string) *TypeIndex {
  * just returns the index of an existing type
  */
 func (section *WebAssemblyTypeSection) GetOrCreateFunctionType(function WebAssemblyFunction) uint32 {
+    /*
     for i, check := range section.Functions {
         if check.Equals(function) {
             return uint32(i)
         }
     }
+    */
 
     section.AddFunctionType(function)
     return uint32(len(section.Functions) - 1)
