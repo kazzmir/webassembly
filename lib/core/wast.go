@@ -1232,6 +1232,10 @@ func doSecondPass(code *Code){
     }
 }
 
+func isId(name string) bool {
+    return len(name) > 0 && name[0] == '$'
+}
+
 func CreateWasmModule(module *sexp.SExpression) (WebAssemblyModule, error) {
     var moduleOut WebAssemblyModule
     typeSection := NewWebAssemblyTypeSection()
@@ -1374,30 +1378,102 @@ func CreateWasmModule(module *sexp.SExpression) (WebAssemblyModule, error) {
                     }
                 }
             case "global":
-                name := expr.Children[0]
-                kind := expr.Children[1]
-                value := expr.Children[2]
+                var name *sexp.SExpression
+                var kind *sexp.SExpression
+                var value *sexp.SExpression
 
-                globalType := GlobalType{}
+                current := 0
 
-                if kind.Name == "mut" {
-                    globalType.Mutable = true
-                    globalType.ValueType = ValueTypeFromName(kind.Children[0].Value)
-                } else {
-                    globalType.Mutable = false
-                    globalType.ValueType = ValueTypeFromName(kind.Value)
+                if len(expr.Children) > 0 {
+                    if isId(expr.Children[0].Value) {
+                        name = expr.Children[0]
+                        current += 1
+                    }
                 }
 
-                valueExpr := MakeExpressions(moduleOut, nil, data.Stack[string]{}, value)
-                globalSection.AddGlobal(&globalType, valueExpr, name.Value)
+                useName := ""
+                if name != nil {
+                    useName = name.Value
+                }
+
+                if len(expr.Children) > current {
+                    kind = expr.Children[current]
+                    if kind.Name == "import" {
+                        if len(kind.Children) != 2 {
+                            fmt.Printf("Syntax error with global: %v\n", expr)
+                            break
+                        }
+
+                        name1 := kind.Children[0].Value
+                        name2 := kind.Children[1].Value
+                        current += 1
+                        if len(expr.Children) <= current {
+                            fmt.Printf("Syntax error with global: expected type\n")
+                            break
+                        }
+
+                        typeExpr := expr.Children[current]
+
+                        globalType := GlobalType{}
+
+                        if kind.Name == "mut" {
+                            globalType.Mutable = true
+                            globalType.ValueType = ValueTypeFromName(typeExpr.Children[0].Value)
+                        } else {
+                            globalType.Mutable = false
+                            globalType.ValueType = ValueTypeFromName(typeExpr.Value)
+                        }
+
+                        globalSection.AddGlobal(&globalType, nil, useName)
+
+                        // FIXME: create import for name1 and name2
+                        _ = name1
+                        _ = name2
+
+                        break
+                    } else if kind.Name == "export" {
+                        break
+                    }
+                }
+
+                if len(expr.Children) > current + 1 {
+                    kind = expr.Children[current]
+                    current += 1
+                    value = expr.Children[current]
+
+                    globalType := GlobalType{}
+
+                    if kind.Name == "mut" {
+                        globalType.Mutable = true
+                        globalType.ValueType = ValueTypeFromName(kind.Children[0].Value)
+                    } else {
+                        globalType.Mutable = false
+                        globalType.ValueType = ValueTypeFromName(kind.Value)
+                    }
+
+                    valueExpr := MakeExpressions(moduleOut, nil, data.Stack[string]{}, value)
+                    globalSection.AddGlobal(&globalType, valueExpr, useName)
+                }
+            case "data":
+                // FIXME:
+            case "import":
+                // FIXME:
             case "memory":
-                min, err := strconv.Atoi(expr.Children[0].Value)
-                if err != nil {
-                    fmt.Printf("Error: unable to read minimum length of memory: %v", err)
-                    break
-                }
+                var name string
+                for i, child := range expr.Children {
+                    if i == 0 && isId(child.Value) {
+                        name = child.Value
+                        continue
+                    }
 
-                memorySection.AddMemory(Limit{Minimum: uint32(min)})
+                    min, err := strconv.Atoi(child.Value)
+                    if err != nil {
+                        fmt.Printf("Error: unable to read minimum length of memory: %v", err)
+                        break
+                    }
+
+                    memorySection.AddMemory(Limit{Minimum: uint32(min)}, name)
+                }
 
             case "table":
                 // so far this handles an inline table expression with funcref elements already given

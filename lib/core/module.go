@@ -160,10 +160,12 @@ func (section *WebAssemblyGlobalSection) String() string {
 
 type WebAssemblyMemorySection struct {
     Memories []Limit
+    Names []string
 }
 
-func (section *WebAssemblyMemorySection) AddMemory(limit Limit){
+func (section *WebAssemblyMemorySection) AddMemory(limit Limit, name string){
     section.Memories = append(section.Memories, limit)
+    section.Names = append(section.Names, name)
 }
 
 func (section *WebAssemblyMemorySection) ToInterface() WebAssemblySection {

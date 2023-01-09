@@ -105,17 +105,20 @@ func InitializeStore(module core.WebAssemblyModule) *Store {
     if globalSection != nil {
         for _, global := range globalSection.Globals {
 
-            value, err := EvaluateOne(global.Expression[0])
-            if err != nil {
-                fmt.Printf("Error: unable to evaluate global: %v\n", err)
-                continue
-            }
+            // FIXME: the global might be bound to an import
+            if len(global.Expression) > 0 {
+                value, err := EvaluateOne(global.Expression[0])
+                if err != nil {
+                    fmt.Printf("Error: unable to evaluate global: %v\n", err)
+                    continue
+                }
 
-            out.Globals = append(out.Globals, Global{
-                Name: global.Name,
-                Value: value,
-                Mutable: global.Global.Mutable,
-            })
+                out.Globals = append(out.Globals, Global{
+                    Name: global.Name,
+                    Value: value,
+                    Mutable: global.Global.Mutable,
+                })
+            }
         }
     }
 
