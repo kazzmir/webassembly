@@ -56,7 +56,7 @@ func MakeFunctionType(function *sexp.SExpression) WebAssemblyFunction {
     // (func $name (param ...) (result ...) code ...)
     // param or result might not exist, but if they do exist they will appear in positions 1/2
     for i := 0; i < len(function.Children); i++ {
-        if i == 0 && function.Children[i].Value != "" {
+        if i == 0 && isId(function.Children[i].Value) {
             continue
         }
         if function.Children[i].Name == "param" {
@@ -490,7 +490,7 @@ func MakeExpressions(module WebAssemblyModule, code *Code, labels data.Stack[str
                 }
                 /* (block $x ...) */
                 if i == 0 {
-                    if child.Value != "" {
+                    if isId(child.Value) {
                         labels.Push(child.Value)
                         defer labels.Pop()
                         continue
@@ -524,7 +524,7 @@ func MakeExpressions(module WebAssemblyModule, code *Code, labels data.Stack[str
             defer labels.Pop()
 
             for i, child := range expr.Children {
-                if i == 0 && child.Value != "" {
+                if i == 0 && isId(child.Value) {
                     labels.Push(child.Value)
                     defer labels.Pop()
                     continue
@@ -1272,7 +1272,7 @@ func CreateWasmModule(module *sexp.SExpression) (WebAssemblyModule, error) {
 
                 for i, child := range expr.Children {
                     /* named function */
-                    if i == 0 && child.Value != "" {
+                    if i == 0 && isId(child.Value) {
                         functionName = child.Value
                     } else {
                         switch child.Name {
@@ -1366,7 +1366,7 @@ func CreateWasmModule(module *sexp.SExpression) (WebAssemblyModule, error) {
             case "type":
                 var name string
                 for i, child := range expr.Children {
-                    if i == 0 && child.Value != "" {
+                    if i == 0 && isId(child.Value) {
                         name = child.Value
                         continue
                     }
