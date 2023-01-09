@@ -720,6 +720,34 @@ func Execute(stack *data.Stack[RuntimeValue], labels *data.Stack[int], expressio
 
             stack.Push(i32(int32(binary.LittleEndian.Uint32(memory[index.I32:]))))
 
+        case *core.I32Load16sExpression:
+            if len(store.Memory) == 0 {
+                return 0, 0, fmt.Errorf("no memory available for i32.load8_s")
+            }
+
+            memory := store.Memory[0]
+
+            index := stack.Pop()
+
+            if int(index.I32) >= len(memory) {
+                return 0, 0, Trap(fmt.Sprintf("invalid memory index %v", index.I32))
+            }
+
+            stack.Push(i32(int32(int16(binary.LittleEndian.Uint16(memory[index.I32:])))))
+        case *core.I32Load16uExpression:
+            if len(store.Memory) == 0 {
+                return 0, 0, fmt.Errorf("no memory available for i32.load8_s")
+            }
+
+            memory := store.Memory[0]
+
+            index := stack.Pop()
+
+            if int(index.I32) >= len(memory) {
+                return 0, 0, Trap(fmt.Sprintf("invalid memory index %v", index.I32))
+            }
+
+            stack.Push(i32(int32(uint16(binary.LittleEndian.Uint16(memory[index.I32:])))))
         case *core.I32Load8sExpression:
             if len(store.Memory) == 0 {
                 return 0, 0, fmt.Errorf("no memory available for i32.load8_s")
@@ -762,6 +790,76 @@ func Execute(stack *data.Stack[RuntimeValue], labels *data.Stack[int], expressio
             }
 
             stack.Push(i64(int64(memory[index.I32])))
+        case *core.I64Load16sExpression:
+            if len(store.Memory) == 0 {
+                return 0, 0, fmt.Errorf("no memory available for i64.load16_s")
+            }
+
+            memory := store.Memory[0]
+
+            index := stack.Pop()
+
+            if int(index.I32) >= len(memory) {
+                return 0, 0, Trap(fmt.Sprintf("invalid memory index %v", index.I32))
+            }
+
+            stack.Push(i64(int64(int16(binary.LittleEndian.Uint16(memory[index.I32:])))))
+        case *core.I64Load16uExpression:
+            if len(store.Memory) == 0 {
+                return 0, 0, fmt.Errorf("no memory available for i64.load16_u")
+            }
+
+            memory := store.Memory[0]
+
+            index := stack.Pop()
+
+            if int(index.I32) >= len(memory) {
+                return 0, 0, Trap(fmt.Sprintf("invalid memory index %v", index.I32))
+            }
+
+            stack.Push(i64(int64(uint16(binary.LittleEndian.Uint16(memory[index.I32:])))))
+        case *core.I64Load32sExpression:
+            if len(store.Memory) == 0 {
+                return 0, 0, fmt.Errorf("no memory available for i64.load32_s")
+            }
+
+            memory := store.Memory[0]
+
+            index := stack.Pop()
+
+            if int(index.I32) >= len(memory) {
+                return 0, 0, Trap(fmt.Sprintf("invalid memory index %v", index.I32))
+            }
+
+            stack.Push(i64(int64(int32(binary.LittleEndian.Uint32(memory[index.I32:])))))
+        case *core.I64Load32uExpression:
+            if len(store.Memory) == 0 {
+                return 0, 0, fmt.Errorf("no memory available for i64.load32_u")
+            }
+
+            memory := store.Memory[0]
+
+            index := stack.Pop()
+
+            if int(index.I32) >= len(memory) {
+                return 0, 0, Trap(fmt.Sprintf("invalid memory index %v", index.I32))
+            }
+
+            stack.Push(i64(int64(uint32(binary.LittleEndian.Uint32(memory[index.I32:])))))
+        case *core.I64LoadExpression:
+            if len(store.Memory) == 0 {
+                return 0, 0, fmt.Errorf("no memory available for i64.load32_u")
+            }
+
+            memory := store.Memory[0]
+
+            index := stack.Pop()
+
+            if int(index.I32) >= len(memory) {
+                return 0, 0, Trap(fmt.Sprintf("invalid memory index %v", index.I32))
+            }
+
+            stack.Push(i64(int64(binary.LittleEndian.Uint64(memory[index.I32:]))))
         case *core.I32StoreExpression:
             value := stack.Pop()
             index := stack.Pop()

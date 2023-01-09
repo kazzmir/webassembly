@@ -226,6 +226,27 @@ func (expr *F32LoadExpression) ConvertToWat(labels data.Stack[int], indents stri
     return fmt.Sprintf("f32.load")
 }
 
+type F64LoadExpression struct {
+}
+
+func (expr *F64LoadExpression) ConvertToWat(labels data.Stack[int], indents string) string {
+    return fmt.Sprintf("f64.load")
+}
+
+type F32ReinterpretI32Expression struct {
+}
+
+func (expr *F32ReinterpretI32Expression) ConvertToWat(labels data.Stack[int], indents string) string {
+    return fmt.Sprintf("f32.reinterpret_i32")
+}
+
+type F64ReinterpretI64Expression struct {
+}
+
+func (expr *F64ReinterpretI64Expression) ConvertToWat(labels data.Stack[int], indents string) string {
+    return fmt.Sprintf("f64.reinterpret_i64")
+}
+
 type F64StoreExpression struct {
 }
 
@@ -584,6 +605,69 @@ type I64LtuExpression struct {
 
 func (expr *I64LtuExpression) ConvertToWat(labels data.Stack[int], indents string) string {
     return "i64.lt_u"
+}
+
+type I32Load16sExpression struct {
+}
+
+func (expr *I32Load16sExpression) ConvertToWat(labels data.Stack[int], indents string) string {
+    return "i32.load16_s"
+}
+
+type I32Load16uExpression struct {
+}
+
+func (expr *I32Load16uExpression) ConvertToWat(labels data.Stack[int], indents string) string {
+    return "i32.load16_u"
+}
+
+type I64Load16sExpression struct {
+}
+
+func (expr *I64Load16sExpression) ConvertToWat(labels data.Stack[int], indents string) string {
+    return "i64.load16_s"
+}
+
+type I64Load16uExpression struct {
+}
+
+func (expr *I64Load16uExpression) ConvertToWat(labels data.Stack[int], indents string) string {
+    return "i64.load16_u"
+}
+
+type I64Load32sExpression struct {
+}
+
+func (expr *I64Load32sExpression) ConvertToWat(labels data.Stack[int], indents string) string {
+    return "i64.load32_s"
+}
+
+type I64Load32uExpression struct {
+}
+
+func (expr *I64Load32uExpression) ConvertToWat(labels data.Stack[int], indents string) string {
+    return "i64.load32_u"
+}
+
+type I64LoadExpression struct {
+}
+
+func (expr *I64LoadExpression) ConvertToWat(labels data.Stack[int], indents string) string {
+    return "i64.load"
+}
+
+type I32ReinterpretF32Expression struct {
+}
+
+func (expr *I32ReinterpretF32Expression) ConvertToWat(labels data.Stack[int], indents string) string {
+    return "i32.reinterpret_f32"
+}
+
+type I64ReinterpretF64Expression struct {
+}
+
+func (expr *I64ReinterpretF64Expression) ConvertToWat(labels data.Stack[int], indents string) string {
+    return "i64.reinterpret_f64"
 }
 
 /* FIXME: generalize these load expression types */

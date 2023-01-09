@@ -1080,6 +1080,8 @@ func MakeExpressions(module WebAssemblyModule, code *Code, labels data.Stack[str
             return append(subexpressions(expr), &F32GtExpression{})
         case "f32.load":
             return append(subexpressions(expr), &F32LoadExpression{})
+        case "f64.load":
+            return append(subexpressions(expr), &F64LoadExpression{})
         case "i32.load":
             var out []Expression
             for _, child := range expr.Children {
@@ -1091,8 +1093,30 @@ func MakeExpressions(module WebAssemblyModule, code *Code, labels data.Stack[str
         case "i32.load8_s":
             // FIXME: handle memory argument alignment and offset
             return append(subexpressions(expr), &I32Load8sExpression{MemoryArgument{}})
+        case "i32.load16_s":
+            return append(subexpressions(expr), &I32Load16sExpression{})
+        case "i32.load16_u":
+            return append(subexpressions(expr), &I32Load16uExpression{})
         case "i32.load8_u":
             return append(subexpressions(expr), &I32Load8uExpression{})
+        case "i64.load16_s":
+            return append(subexpressions(expr), &I64Load16sExpression{})
+        case "i64.load16_u":
+            return append(subexpressions(expr), &I64Load16uExpression{})
+        case "i64.load32_s":
+            return append(subexpressions(expr), &I64Load32sExpression{})
+        case "i64.load32_u":
+            return append(subexpressions(expr), &I64Load32uExpression{})
+        case "i64.load":
+            return append(subexpressions(expr), &I64LoadExpression{})
+        case "f32.reinterpret_i32":
+            return append(subexpressions(expr), &F32ReinterpretI32Expression{})
+        case "f64.reinterpret_i64":
+            return append(subexpressions(expr), &F64ReinterpretI64Expression{})
+        case "i32.reinterpret_f32":
+            return append(subexpressions(expr), &I32ReinterpretF32Expression{})
+        case "i64.reinterpret_f64":
+            return append(subexpressions(expr), &I64ReinterpretF64Expression{})
         case "i64.div_s":
             return append(subexpressions(expr), &I64DivsExpression{})
         case "i64.div_u":
